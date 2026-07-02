@@ -1,6 +1,6 @@
 //
-//  mdaApp.swift
-//  mda
+//  MDEApp.swift
+//  MDE
 //
 //  Created by Deep Root on 6/25/26.
 //
@@ -10,9 +10,9 @@ import SwiftData
 import UniformTypeIdentifiers
 
 @main
-struct mdaApp: App {
+struct MDEApp: App {
     var body: some Scene {
-        DocumentGroup(editing: .itemDocument, migrationPlan: mdaMigrationPlan.self) {
+        DocumentGroup(editing: .itemDocument, migrationPlan: MDEMigrationPlan.self) {
             ContentView()
         }
     }
@@ -20,13 +20,13 @@ struct mdaApp: App {
 
 extension UTType {
     static var itemDocument: UTType {
-        UTType(importedAs: "com.example.item-document")
+        UTType(importedAs: "name.aks.mde.document")
     }
 }
 
-struct mdaMigrationPlan: SchemaMigrationPlan {
+struct MDEMigrationPlan: SchemaMigrationPlan {
     static var schemas: [VersionedSchema.Type] = [
-        mdaVersionedSchema.self,
+        MDEVersionedSchema.self,
     ]
 
     static var stages: [MigrationStage] = [
@@ -34,7 +34,7 @@ struct mdaMigrationPlan: SchemaMigrationPlan {
     ]
 }
 
-struct mdaVersionedSchema: VersionedSchema {
+struct MDEVersionedSchema: VersionedSchema {
     static var versionIdentifier = Schema.Version(1, 0, 0)
 
     static var models: [any PersistentModel.Type] = [

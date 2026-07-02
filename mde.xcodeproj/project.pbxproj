@@ -12,50 +12,50 @@
 			containerPortal = 027480F92FED070800B678AB /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 027481002FED070800B678AB;
-			remoteInfo = mda;
+			remoteInfo = mde;
 		};
 		0274811C2FED070900B678AB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 027480F92FED070800B678AB /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 027481002FED070800B678AB;
-			remoteInfo = mda;
+			remoteInfo = mde;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		027481012FED070800B678AB /* mda.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mda.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		027481112FED070900B678AB /* mdaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		0274811B2FED070900B678AB /* mdaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		027481012FED070800B678AB /* mde.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mde.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		027481112FED070900B678AB /* mdeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0274811B2FED070900B678AB /* mdeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		027481232FED070900B678AB /* Exceptions for "mda" folder in "mda" target */ = {
+		027481232FED070900B678AB /* Exceptions for "mde" folder in "mde" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 027481002FED070800B678AB /* mda */;
+			target = 027481002FED070800B678AB /* mde */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		027481032FED070800B678AB /* mda */ = {
+		027481032FED070800B678AB /* mde */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				027481232FED070900B678AB /* Exceptions for "mda" folder in "mda" target */,
+				027481232FED070900B678AB /* Exceptions for "mde" folder in "mde" target */,
 			);
-			path = mda;
+			path = mde;
 			sourceTree = "<group>";
 		};
-		027481142FED070900B678AB /* mdaTests */ = {
+		027481142FED070900B678AB /* mdeTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = mdaTests;
+			path = mdeTests;
 			sourceTree = "<group>";
 		};
-		0274811E2FED070900B678AB /* mdaUITests */ = {
+		0274811E2FED070900B678AB /* mdeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = mdaUITests;
+			path = mdeUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,9 +88,9 @@
 		027480F82FED070800B678AB = {
 			isa = PBXGroup;
 			children = (
-				027481032FED070800B678AB /* mda */,
-				027481142FED070900B678AB /* mdaTests */,
-				0274811E2FED070900B678AB /* mdaUITests */,
+				027481032FED070800B678AB /* mde */,
+				027481142FED070900B678AB /* mdeTests */,
+				0274811E2FED070900B678AB /* mdeUITests */,
 				027481022FED070800B678AB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -98,9 +98,9 @@
 		027481022FED070800B678AB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				027481012FED070800B678AB /* mda.app */,
-				027481112FED070900B678AB /* mdaTests.xctest */,
-				0274811B2FED070900B678AB /* mdaUITests.xctest */,
+				027481012FED070800B678AB /* mde.app */,
+				027481112FED070900B678AB /* mdeTests.xctest */,
+				0274811B2FED070900B678AB /* mdeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,9 +108,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		027481002FED070800B678AB /* mda */ = {
+		027481002FED070800B678AB /* mde */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 027481242FED070900B678AB /* Build configuration list for PBXNativeTarget "mda" */;
+			buildConfigurationList = 027481242FED070900B678AB /* Build configuration list for PBXNativeTarget "mde" */;
 			buildPhases = (
 				027480FD2FED070800B678AB /* Sources */,
 				027480FE2FED070800B678AB /* Frameworks */,
@@ -121,18 +121,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				027481032FED070800B678AB /* mda */,
+				027481032FED070800B678AB /* mde */,
 			);
-			name = mda;
+			name = mde;
 			packageProductDependencies = (
 			);
-			productName = mda;
-			productReference = 027481012FED070800B678AB /* mda.app */;
+			productName = mde;
+			productReference = 027481012FED070800B678AB /* mde.app */;
 			productType = "com.apple.product-type.application";
 		};
-		027481102FED070900B678AB /* mdaTests */ = {
+		027481102FED070900B678AB /* mdeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 027481292FED070900B678AB /* Build configuration list for PBXNativeTarget "mdaTests" */;
+			buildConfigurationList = 027481292FED070900B678AB /* Build configuration list for PBXNativeTarget "mdeTests" */;
 			buildPhases = (
 				0274810D2FED070900B678AB /* Sources */,
 				0274810E2FED070900B678AB /* Frameworks */,
@@ -144,18 +144,18 @@
 				027481132FED070900B678AB /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				027481142FED070900B678AB /* mdaTests */,
+				027481142FED070900B678AB /* mdeTests */,
 			);
-			name = mdaTests;
+			name = mdeTests;
 			packageProductDependencies = (
 			);
-			productName = mdaTests;
-			productReference = 027481112FED070900B678AB /* mdaTests.xctest */;
+			productName = mdeTests;
+			productReference = 027481112FED070900B678AB /* mdeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		0274811A2FED070900B678AB /* mdaUITests */ = {
+		0274811A2FED070900B678AB /* mdeUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0274812C2FED070900B678AB /* Build configuration list for PBXNativeTarget "mdaUITests" */;
+			buildConfigurationList = 0274812C2FED070900B678AB /* Build configuration list for PBXNativeTarget "mdeUITests" */;
 			buildPhases = (
 				027481172FED070900B678AB /* Sources */,
 				027481182FED070900B678AB /* Frameworks */,
@@ -167,13 +167,13 @@
 				0274811D2FED070900B678AB /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				0274811E2FED070900B678AB /* mdaUITests */,
+				0274811E2FED070900B678AB /* mdeUITests */,
 			);
-			name = mdaUITests;
+			name = mdeUITests;
 			packageProductDependencies = (
 			);
-			productName = mdaUITests;
-			productReference = 0274811B2FED070900B678AB /* mdaUITests.xctest */;
+			productName = mdeUITests;
+			productReference = 0274811B2FED070900B678AB /* mdeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -199,7 +199,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 027480FC2FED070800B678AB /* Build configuration list for PBXProject "mda" */;
+			buildConfigurationList = 027480FC2FED070800B678AB /* Build configuration list for PBXProject "mde" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -213,9 +213,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				027481002FED070800B678AB /* mda */,
-				027481102FED070900B678AB /* mdaTests */,
-				0274811A2FED070900B678AB /* mdaUITests */,
+				027481002FED070800B678AB /* mde */,
+				027481102FED070900B678AB /* mdeTests */,
+				0274811A2FED070900B678AB /* mdeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -271,12 +271,12 @@
 /* Begin PBXTargetDependency section */
 		027481132FED070900B678AB /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 027481002FED070800B678AB /* mda */;
+			target = 027481002FED070800B678AB /* mde */;
 			targetProxy = 027481122FED070900B678AB /* PBXContainerItemProxy */;
 		};
 		0274811D2FED070900B678AB /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 027481002FED070800B678AB /* mda */;
+			target = 027481002FED070800B678AB /* mde */;
 			targetProxy = 0274811C2FED070900B678AB /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -294,14 +294,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = mda/Info.plist;
+				INFOPLIST_FILE = mde/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mda;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -325,14 +325,14 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = mda/Info.plist;
+				INFOPLIST_FILE = mde/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mda;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -471,14 +471,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdaTests;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mda.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/mda";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mde.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/mde";
 			};
 			name = Debug;
 		};
@@ -491,14 +491,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdaTests;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mda.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/mda";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/mde.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/mde";
 			};
 			name = Release;
 		};
@@ -509,14 +509,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdaUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = mda;
+				TEST_TARGET_NAME = mde;
 			};
 			name = Debug;
 		};
@@ -527,21 +527,21 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdaUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mdeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = mda;
+				TEST_TARGET_NAME = mde;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		027480FC2FED070800B678AB /* Build configuration list for PBXProject "mda" */ = {
+		027480FC2FED070800B678AB /* Build configuration list for PBXProject "mde" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				027481272FED070900B678AB /* Debug */,
@@ -550,7 +550,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		027481242FED070900B678AB /* Build configuration list for PBXNativeTarget "mda" */ = {
+		027481242FED070900B678AB /* Build configuration list for PBXNativeTarget "mde" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				027481252FED070900B678AB /* Debug */,
@@ -559,7 +559,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		027481292FED070900B678AB /* Build configuration list for PBXNativeTarget "mdaTests" */ = {
+		027481292FED070900B678AB /* Build configuration list for PBXNativeTarget "mdeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0274812A2FED070900B678AB /* Debug */,
@@ -568,7 +568,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0274812C2FED070900B678AB /* Build configuration list for PBXNativeTarget "mdaUITests" */ = {
+		0274812C2FED070900B678AB /* Build configuration list for PBXNativeTarget "mdeUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0274812D2FED070900B678AB /* Debug */,

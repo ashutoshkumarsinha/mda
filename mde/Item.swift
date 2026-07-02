@@ -1,6 +1,6 @@
 //
 //  Item.swift
-//  mda
+//  MDE
 //
 //  Created by Deep Root on 6/25/26.
 //
