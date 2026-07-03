@@ -87,6 +87,13 @@ struct ContentView: View {
             showRecoveryAlert = store.needsDatabaseRecovery
         }
         .vaultPackageLifecycle(store: store)
+        .background {
+            if let syncCoordinator {
+                Color.clear
+                    .frame(width: 0, height: 0)
+                    .syncLifecycle(coordinator: syncCoordinator, networkMonitor: SyncNetworkMonitor())
+            }
+        }
         .task {
             if syncCoordinator == nil {
                 let coordinator = SyncCoordinator(store: store)

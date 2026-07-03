@@ -17,6 +17,13 @@ struct SyncQueueItem: Codable, FetchableRecord, MutablePersistableRecord, Identi
     enum Columns: String, ColumnExpression {
         case id, noteID = "note_id", vaultID = "vault_id", enqueuedAt = "enqueued_at"
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case noteID = "note_id"
+        case vaultID = "vault_id"
+        case enqueuedAt = "enqueued_at"
+    }
 }
 
 struct NoteSyncBase: Codable, FetchableRecord, MutablePersistableRecord, Sendable {
@@ -27,6 +34,11 @@ struct NoteSyncBase: Codable, FetchableRecord, MutablePersistableRecord, Sendabl
 
     enum Columns: String, ColumnExpression {
         case noteID = "note_id", payloadJSON = "payload_json"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case noteID = "note_id"
+        case payloadJSON = "payload_json"
     }
 }
 
@@ -43,6 +55,13 @@ enum SyncQueueStore {
             arguments: [noteID, vaultID]
         )
         try item.insert(db)
+    }
+
+    static func dequeue(noteID: String, vaultID: String, in db: Database) throws {
+        try db.execute(
+            sql: "DELETE FROM sync_queue WHERE note_id = ? AND vault_id = ?",
+            arguments: [noteID, vaultID]
+        )
     }
 
     static func dequeueAll(vaultID: String, in db: Database) throws -> [SyncQueueItem] {

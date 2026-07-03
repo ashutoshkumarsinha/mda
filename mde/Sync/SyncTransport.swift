@@ -14,6 +14,7 @@ final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var records: [String: [String: EncryptedSyncRecord]] = [:]
     private(set) var uploadCount = 0
+    private(set) var fetchCount = 0
     var isOffline = false
 
     func upload(_ record: EncryptedSyncRecord, vaultID: String) async throws {
@@ -27,6 +28,7 @@ final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
     func fetchRemote(vaultID: String, since changeToken: Data?) async throws -> SyncFetchResult {
         if isOffline { throw SyncError.transportUnavailable }
         lock.lock()
+        fetchCount += 1
         defer { lock.unlock() }
         let vaultRecords = records[vaultID] ?? [:]
         return SyncFetchResult(

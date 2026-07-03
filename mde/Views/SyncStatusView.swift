@@ -21,7 +21,7 @@ struct SyncStatusToolbarContent: View {
                         .background(.quaternary, in: Capsule())
                 }
                 Button("Sync Now") {
-                    Task { await coordinator.syncNow() }
+                    Task { await coordinator.syncNow(forceFull: true) }
                 }
                 .disabled(coordinator.status == .syncing)
                 .accessibilityLabel("Sync now")

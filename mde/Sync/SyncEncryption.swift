@@ -11,6 +11,7 @@ enum SyncError: LocalizedError {
     case decryptionFailed
     case keyUnavailable
     case transportUnavailable
+    case recordTooLarge(Int)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum SyncError: LocalizedError {
         case .decryptionFailed: return "Could not decrypt synced note."
         case .keyUnavailable: return "Sync encryption key is not available."
         case .transportUnavailable: return "Sync transport is not available."
+        case .recordTooLarge(let bytes):
+            return "Encrypted note exceeds \(bytes) bytes (limit \(SyncPolicy.maxRecordBytes))."
         }
     }
 }

@@ -550,6 +550,18 @@ final class VaultStore {
         markPackageDirty()
     }
 
+    func updateCloudChangeToken(_ token: Data?) throws {
+        meta.cloudChangeToken = token
+        markPackageDirty()
+    }
+
+    func dequeueSync(noteID: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try SyncQueueStore.dequeue(noteID: noteID, vaultID: meta.vaultID, in: db)
+        }
+    }
+
     func enqueueSync(noteID: String) throws {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
         try dbQueue.write { db in
@@ -569,6 +581,7 @@ final class VaultStore {
         return try dbQueue.read { db in
             let items = try SyncQueueItem
                 .filter(SyncQueueItem.Columns.vaultID == meta.vaultID)
+                .order(SyncQueueItem.Columns.enqueuedAt.asc)
                 .fetchAll(db)
             var payloads: [NoteSyncPayload] = []
             for item in items {

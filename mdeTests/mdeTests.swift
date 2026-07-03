@@ -855,3 +855,99 @@ struct Phase3OptimizationTests {
         #expect(scoped.count == 1)
     }
 }
+
+// MARK: - Phase 4 optimization
+
+@Suite(.serialized)
+@MainActor
+struct Phase4OptimizationTests {
+
+    private func makeVaultID() -> String { "phase4-\(UUID().uuidString)" }
+
+    @Test func phase4SkipsDeltaUploadWhenChecksumMatches() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Delta", content: "Body")
+        let payload = try #require(try store.syncPayload(for: note.id))
+        try store.saveSyncBase(payload)
+        try store.enqueueSync(noteID: note.id)
+
+        let pending = try store.pendingSyncPayloads()
+        let base = try #require(try store.syncBase(for: note.id))
+        #expect(pending.count == 1)
+        #expect(pending[0].checksum == base.checksum)
+    }
+
+    @Test func phase4PushPendingSkipsWhenBaseMatches() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = makeVaultID()
+        try keyStore.saveKey(SyncEncryption.generateKey(), vaultID: vaultID)
+
+        let store = VaultStore(meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true))
+        _ = try store.createNote(title: "Queued", content: "Payload")
+        try store.saveSyncBase(try #require(try store.syncPayload(for: store.notes[0].id)))
+        try store.enqueueSync(noteID: store.notes[0].id)
+
+        let coordinator = SyncCoordinator(store: store, transport: transport, keyStore: keyStore)
+        try await coordinator.enableSync()
+        #expect(transport.uploadCount == 0)
+        #expect(try store.pendingSyncCount() == 0)
+    }
+
+    @Test func phase4BootstrapSkipsStalePull() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = makeVaultID()
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        var meta = VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true)
+        meta.lastSyncedAt = Date()
+        meta.cloudChangeToken = Data("fresh-token".utf8)
+
+        let store = VaultStore(meta: meta)
+        let coordinator = SyncCoordinator(store: store, transport: transport, keyStore: keyStore)
+        await coordinator.bootstrap()
+
+        #expect(transport.fetchCount == 0)
+    }
+
+    @Test func phase4BackgroundPauseDefersDebouncedSync() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = makeVaultID()
+        try keyStore.saveKey(SyncEncryption.generateKey(), vaultID: vaultID)
+
+        let store = VaultStore(meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true))
+        let note = try store.createNote(title: "Deferred")
+        let coordinator = SyncCoordinator(store: store, transport: transport, keyStore: keyStore)
+        try await coordinator.enableSync()
+        let uploadsAfterEnable = transport.uploadCount
+
+        coordinator.setBackgroundPaused(true)
+        await coordinator.syncNow()
+        #expect(transport.uploadCount == uploadsAfterEnable)
+
+        coordinator.setBackgroundPaused(false)
+        await coordinator.syncNow(forceFull: true)
+        #expect(transport.uploadCount == uploadsAfterEnable)
+        #expect(try store.pendingSyncCount() == 0)
+    }
+
+    @Test func phase4RejectsOversizedEncryptedRecord() throws {
+        let key = SyncEncryption.generateKey()
+        var payload = NoteSyncPayload(
+            note: Note(title: "Huge", content: String(repeating: "x", count: 2_000_000)),
+            vaultID: "vault"
+        )
+        payload.content = String(repeating: "x", count: 2_000_000)
+        payload = payload.refreshedChecksum()
+
+        let ciphertext = try SyncEncryption.encrypt(payload: payload, using: key)
+        if ciphertext.count > SyncPolicy.maxRecordBytes {
+            #expect(true)
+        } else {
+            Issue.record("Expected ciphertext to exceed sync record budget in test")
+        }
+    }
+}

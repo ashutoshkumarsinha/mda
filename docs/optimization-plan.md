@@ -99,10 +99,25 @@ Run: `xcodebuild -only-testing:mdeTests/Phase3OptimizationTests test`
 
 ---
 
+## Phase 4 — Sync & network ✅
+
+1. **Smarter scheduling** — debounced push uses `SyncPolicy.editDebounceSeconds`; bootstrap skips pull when token is fresh and `lastSyncedAt` is within 5 minutes with no pending uploads.
+2. **Delta uploads** — skip upload when `syncBase.checksum` matches current payload; per-note dequeue.
+3. **Persisted change token** — `VaultMeta.cloudChangeToken` survives relaunch for incremental CloudKit fetch.
+4. **Background / network** — `SyncLifecycle` pauses auto-sync on iOS background; `SyncNetworkMonitor` drives offline state via `NWPathMonitor`.
+5. **Record size guard** — reject encrypted payloads over 1 MB before upload.
+
+### Tests (`Phase4OptimizationTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase4OptimizationTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
+| 2026-07-03 | Phase 4: sync scheduling, delta uploads, pull throttle, network/background lifecycle |
 | 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |
