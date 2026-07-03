@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		024BE42F2FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481312FED070900B678AB /* GRDB */; };
 		024BE4302FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481332FED070900B678AB /* GRDB */; };
+		024BE5112FF7406D00DE451E /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 027481352FED070900B678AB /* Markdown */; };
+		024BE5122FF7406D00DE451E /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 027481362FED070900B678AB /* Markdown */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				024BE5112FF7406D00DE451E /* Markdown in Frameworks */,
 				024BE42F2FF72AE600DE451E /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -78,6 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				024BE5122FF7406D00DE451E /* Markdown in Frameworks */,
 				024BE4302FF72AE600DE451E /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -133,6 +137,7 @@
 			name = mde;
 			packageProductDependencies = (
 				027481312FED070900B678AB /* GRDB */,
+				027481352FED070900B678AB /* Markdown */,
 			);
 			productName = mde;
 			productReference = 027481012FED070800B678AB /* mde.app */;
@@ -219,6 +224,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */,
+				027481342FED070900B678AB /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 027481022FED070800B678AB /* Products */;
@@ -600,6 +606,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		027481342FED070900B678AB /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-markdown";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -612,6 +626,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
+		};
+		027481352FED070900B678AB /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 027481342FED070900B678AB /* XCRemoteSwiftPackageReference "swift-markdown" */;
+			productName = Markdown;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

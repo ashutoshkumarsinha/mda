@@ -7,6 +7,20 @@ import Foundation
 import GRDB
 import Observation
 
+enum VaultStoreError: LocalizedError {
+    case duplicateTitle(String)
+    case databaseUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .duplicateTitle(let title):
+            return "A note titled \"\(title)\" already exists."
+        case .databaseUnavailable:
+            return "Vault database is not available."
+        }
+    }
+}
+
 @Observable
 final class VaultStore {
     private(set) var meta: VaultMeta
@@ -14,6 +28,9 @@ final class VaultStore {
     private var packageURL: URL?
 
     var notes: [Note] = []
+    var tagTree: [TagNode] = []
+
+    private var autosaveTask: Task<Void, Never>?
 
     init(meta: VaultMeta = .makeNew()) {
         self.meta = meta
@@ -55,7 +72,7 @@ final class VaultStore {
 
         try DatabaseSchema.migrate(dbQueue!)
         packageURL = url
-        try reloadNotes()
+        try refreshAll()
     }
 
     func load(from fileWrapper: FileWrapper) throws {
@@ -64,7 +81,7 @@ final class VaultStore {
         dbQueue = try Self.openDatabase(from: snapshot.databaseData)
         try DatabaseSchema.migrate(dbQueue!)
         packageURL = nil
-        try reloadNotes()
+        try refreshAll()
     }
 
     func makeSnapshot() throws -> VaultFileSnapshot {
@@ -90,17 +107,64 @@ final class VaultStore {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
 
         var note = Note(title: title, content: content)
+        if note.title.isEmpty {
+            note.title = TitleDeriver.derive(from: content, existingTitles: try allTitles())
+        }
+        try validateUniqueTitle(note.title, excludingNoteID: nil)
+
         try dbQueue.write { db in
             try note.insert(db)
+            try NoteIndexer.reindexTags(for: note.id, content: note.content, in: db)
         }
-        try reloadNotes()
+        try refreshAll()
         return note
     }
 
-    func softDeleteNotes(at offsets: IndexSet) throws {
+    func updateNote(id: String, content: String) throws -> Note {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
 
-        let ids = offsets.map { notes[$0].id }
+        var updated = try dbQueue.read { db in
+            guard var note = try Note.filter(Note.Columns.id == id).fetchOne(db) else {
+                throw VaultError.databaseUnavailable
+            }
+            return note
+        }
+
+        updated.content = content
+        updated.updatedAt = Date()
+        updated.clientUpdatedAt = Date()
+        updated.version += 1
+
+        let titles = try allTitles(excludingNoteID: id)
+        updated.title = TitleDeriver.derive(from: content, existingTitles: titles, excludingNoteID: id)
+        try validateUniqueTitle(updated.title, excludingNoteID: id)
+
+        try dbQueue.write { db in
+            try updated.update(db)
+            try NoteIndexer.reindexTags(for: id, content: content, in: db)
+        }
+        try refreshAll()
+        return updated
+    }
+
+    func scheduleAutosave(noteID: String, content: String) {
+        autosaveTask?.cancel()
+        autosaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            do {
+                _ = try updateNote(id: noteID, content: content)
+                try persistToPackageIfNeeded()
+            } catch {
+                // Surface via UI on next explicit action
+            }
+        }
+    }
+
+    func softDeleteNotes(at offsets: IndexSet, in displayedNotes: [Note]) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+
+        let ids = offsets.map { displayedNotes[$0].id }
         try dbQueue.write { db in
             for id in ids {
                 try db.execute(
@@ -109,10 +173,98 @@ final class VaultStore {
                 )
             }
         }
-        try reloadNotes()
+        try refreshAll()
     }
 
-    func reloadNotes() throws {
+    func softDeleteNote(id: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE note SET is_deleted = 1, updated_at = ? WHERE id = ?",
+                arguments: [Date(), id]
+            )
+        }
+        try refreshAll()
+    }
+
+    func notesFiltered(by tagPath: String?) throws -> [Note] {
+        guard let dbQueue else { return [] }
+
+        if let tagPath {
+            return try dbQueue.read { db in
+                try Note.fetchAll(db, sql: """
+                    SELECT DISTINCT n.*
+                    FROM note n
+                    JOIN note_tag nt ON nt.note_id = n.id
+                    JOIN tag t ON t.id = nt.tag_id
+                    WHERE n.is_deleted = 0
+                      AND (t.path = ? OR t.path LIKE ?)
+                    ORDER BY n.is_pinned DESC, n.updated_at DESC
+                """, arguments: [tagPath, "\(tagPath)/%"])
+            }
+        }
+
+        return try dbQueue.read { db in
+            try Note
+                .filter(Note.Columns.isDeleted == false)
+                .order(Note.Columns.isPinned.desc, Note.Columns.updatedAt.desc)
+                .fetchAll(db)
+        }
+    }
+
+    func searchNotes(query: String) throws -> [SearchResult] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let dbQueue, !trimmed.isEmpty else { return [] }
+
+        let ftsQuery = Self.ftsQuery(from: trimmed)
+        return try dbQueue.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT n.id, n.title, n.updated_at,
+                       snippet(note_fts, 1, '==', '==', '...', 12) AS match_snippet
+                FROM note n
+                JOIN note_fts ON note_fts.rowid = n.rowid
+                WHERE note_fts MATCH ?
+                  AND n.is_deleted = 0
+                ORDER BY rank
+                LIMIT 50
+            """, arguments: [ftsQuery])
+
+            return rows.map { row in
+                SearchResult(
+                    id: row["id"],
+                    title: row["title"],
+                    updatedAt: row["updated_at"],
+                    snippet: row["match_snippet"] ?? ""
+                )
+            }
+        }
+    }
+
+    func noteDisplayTitle(_ note: Note) -> String {
+        let trimmed = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        let content = note.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !content.isEmpty { return String(content.prefix(80)) }
+        return "Untitled"
+    }
+
+    func noteSnippet(_ note: Note, maxLength: Int = 120) -> String {
+        let text = note.content
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+        if text.count <= maxLength { return text }
+        return String(text.prefix(maxLength)) + "..."
+    }
+
+    // MARK: - Private
+
+    private func refreshAll() throws {
+        try reloadNotes()
+        try reloadTagTree()
+    }
+
+    private func reloadNotes() throws {
         guard let dbQueue else {
             notes = []
             return
@@ -126,16 +278,60 @@ final class VaultStore {
         }
     }
 
-    // MARK: - Private
+    private func reloadTagTree() throws {
+        guard let dbQueue else {
+            tagTree = []
+            return
+        }
+        tagTree = try dbQueue.read { db in
+            try NoteIndexer.fetchTagTree(in: db)
+        }
+    }
+
+    private func allTitles(excludingNoteID: String? = nil) throws -> [String] {
+        guard let dbQueue else { return [] }
+        return try dbQueue.read { db in
+            let notes = try Note.filter(Note.Columns.isDeleted == false).fetchAll(db)
+            return notes
+                .filter { $0.id != excludingNoteID }
+                .map(\.title)
+        }
+    }
+
+    private func validateUniqueTitle(_ title: String, excludingNoteID: String?) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        let lowered = title.lowercased()
+        let conflict = try dbQueue.read { db in
+            try Note
+                .filter(Note.Columns.isDeleted == false)
+                .filter(sql: "LOWER(title) = ?", arguments: [lowered])
+                .fetchAll(db)
+                .contains { $0.id != excludingNoteID }
+        }
+        if conflict {
+            throw VaultStoreError.duplicateTitle(title)
+        }
+    }
 
     private func openInMemoryDatabase() {
         do {
             dbQueue = try DatabaseQueue()
             try DatabaseSchema.migrate(dbQueue!)
-            try reloadNotes()
+            try refreshAll()
         } catch {
             notes = []
+            tagTree = []
         }
+    }
+
+    private static func ftsQuery(from userInput: String) -> String {
+        userInput
+            .split(whereSeparator: \.isWhitespace)
+            .map { token in
+                let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
+                return "\"\(escaped)\"*"
+            }
+            .joined(separator: " ")
     }
 
     private static func openDatabase(from data: Data) throws -> DatabaseQueue {

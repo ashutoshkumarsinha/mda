@@ -25,4 +25,5 @@ jobs:
             -scheme mde \
             -destination 'platform=macOS' \
             build test \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO

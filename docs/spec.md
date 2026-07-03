@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** Phase 0 complete — GRDB vault (`.mde` package) replaces SwiftData. Next: Phase 1 (editor, tags, FTS UI). See [§13](#13-delivery-phases).
+**Current state:** Phase 1 complete — three-column macOS UI with GRDB vault, markdown editor, tags, and FTS search. Next: Phase 2 (WikiLinks, backlinks, hybrid tokens). See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -420,9 +420,14 @@ stateDiagram-v2
 
 **Exit:** Builds clean; `TC-000` passes.
 
-### Phase 1 — Local core (MVP)
+### Phase 1 — Local core (MVP) *(complete)*
 
-GRDB v1 · note CRUD + autosave · TextKit 2 editor (§5.1 MUST items) · tags · FTS5 · layouts
+- [x] GRDB v1 schema + note CRUD
+- [x] Autosave (2 s debounce) + title derivation
+- [x] TextKit 2 editor (`NSTextView`) with basic Markdown styling
+- [x] Tag extraction, sidebar tree, subtree-inclusive filter
+- [x] FTS5 search with snippets
+- [x] Three-column macOS layout (Tags | Notes | Editor)
 
 **Exit:** UC-01, UC-02, UC-04, UC-06 · TC-001–TC-004
 
@@ -607,3 +612,4 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 |---------|------|---------|
 | 0.1–0.4 | 2026-07-02 | Initial structure, MDE rename, Xcode alignment |
 | 1.0 | 2026-07-02 | Syntax spec, vault model, resolved OQs, platform matrix, traceability, 15 test cases, security/a11y, expanded FRs, design tokens, optimized structure |
+| 1.1 | 2026-07-02 | Phase 1 implemented: markdown editor, tags, FTS search, three-column macOS UI |

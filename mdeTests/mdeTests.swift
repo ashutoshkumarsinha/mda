@@ -63,6 +63,33 @@ struct VaultMetaTests {
     }
 }
 
+struct TagExtractorTests {
+
+    @Test func extractsNestedTags() {
+        let paths = TagExtractor.extractPaths(from: "Meeting #work/active and #inbox")
+        #expect(paths.contains("work/active"))
+        #expect(paths.contains("inbox"))
+    }
+
+    @Test func ignoresTagsInCodeSpans() {
+        let paths = TagExtractor.extractPaths(from: "Use `#not-a-tag` inline")
+        #expect(paths.isEmpty)
+    }
+}
+
+struct TitleDeriverTests {
+
+    @Test func derivesFromHeading() {
+        let title = TitleDeriver.derive(from: "# Project\nBody", existingTitles: [])
+        #expect(title == "Project")
+    }
+
+    @Test func derivesFromFirstLine() {
+        let title = TitleDeriver.derive(from: "Hello world", existingTitles: [])
+        #expect(title == "Hello world")
+    }
+}
+
 struct VaultStoreTests {
 
     @Test func createsAndListsNotes() throws {
@@ -74,8 +101,9 @@ struct VaultStoreTests {
 
     @Test func softDeletesNote() throws {
         let store = VaultStore()
-        _ = try store.createNote(title: "Delete me")
-        try store.softDeleteNotes(at: IndexSet(integer: 0))
+        let note = try store.createNote(title: "Delete me")
+        let displayed = try store.notesFiltered(by: nil)
+        try store.softDeleteNotes(at: IndexSet(integer: 0), in: displayed)
         #expect(store.notes.isEmpty)
     }
 
@@ -114,5 +142,50 @@ struct VaultStoreTests {
         try reopened.attachToPackage(at: tempDir)
         #expect(reopened.notes.count == 1)
         #expect(reopened.notes[0].title == "On disk")
+    }
+
+    // TC-001 — Create & autosave
+    @Test func tc001CreateAndPersistContent() throws {
+        let store = VaultStore()
+        let note = try store.createNote()
+        _ = try store.updateNote(id: note.id, content: "Hello #inbox")
+        let reloaded = VaultStore()
+        let snapshot = try store.makeSnapshot()
+        try reloaded.load(from: snapshot.makeFileWrapper())
+        #expect(reloaded.notes.first?.content.contains("inbox") == true)
+    }
+
+    // TC-002 — Tag sidebar filter
+    @Test func tc002TagFilterIsSubtreeInclusive() throws {
+        let store = VaultStore()
+        _ = try store.createNote(content: "A #work")
+        _ = try store.createNote(content: "B #work/active")
+
+        #expect(store.tagTree.map(\.path).contains("work"))
+        #expect(store.tagTree.map(\.path).contains("work/active"))
+
+        let workNotes = try store.notesFiltered(by: "work")
+        #expect(workNotes.count == 2)
+
+        let activeNotes = try store.notesFiltered(by: "work/active")
+        #expect(activeNotes.count == 1)
+    }
+
+    // TC-003 — Full-text search
+    @Test func tc003SearchFindsContent() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Minerals", content: "quartz crystal")
+
+        let results = try store.searchNotes(query: "quartz")
+        #expect(results.count >= 1)
+        #expect(results.first?.title == "Minerals")
+    }
+
+    // TC-004 — Title derivation
+    @Test func tc004TitleDerivedFromHeading() throws {
+        let store = VaultStore()
+        let note = try store.createNote()
+        let updated = try store.updateNote(id: note.id, content: "# Title\nBody")
+        #expect(updated.title == "Title")
     }
 }
