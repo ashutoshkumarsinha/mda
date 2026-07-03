@@ -419,7 +419,10 @@ struct AccessibilityTests {
     @Test func tc012PrimaryViewsExposeLabels() {
         #expect(AccessibilityLabels.tagSidebar == "Tags")
         #expect(AccessibilityLabels.noteList == "Notes")
+        #expect(AccessibilityLabels.trashList == "Trash")
         #expect(AccessibilityLabels.noteEditor == "Note editor")
+        #expect(AccessibilityLabels.exportNote == "Export note as Markdown")
+        #expect(AccessibilityLabels.emptyBacklinks == "No notes link here yet")
         #expect(AccessibilityLabels.tagFilter(path: "inbox", isSelected: true).contains("inbox"))
         #expect(AccessibilityLabels.noteRow(
             title: "Meeting",
@@ -1087,5 +1090,72 @@ struct Phase6ObservabilityTests {
         let p95 = PerformancePercentile.value([1, 2, 3, 4, 100], percentile: 0.95)
         #expect(p95 >= 4)
         #expect(p95 <= 100)
+    }
+}
+
+// MARK: - Phase 7 product enhancements
+
+struct Phase7EnhancementTests {
+
+    @Test func phase7ExportNoteAsMarkdown() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Export Me", content: "Body text")
+        let markdown = try store.exportNoteAsMarkdown(id: note.id)
+        #expect(markdown.contains("Export Me"))
+        #expect(markdown.contains("Body text"))
+        #expect(store.exportFilename(for: note.id) == "Export Me.md")
+    }
+
+    @Test func phase7FocusedScopeIncludesPinnedAndRecent() throws {
+        let store = VaultStore()
+        let pinned = try store.createNote(title: "Pinned")
+        try store.togglePin(id: pinned.id)
+        let recent = try store.createNote(title: "Recent")
+
+        let focused = try store.noteSummariesPage(offset: 0, limit: 100, tagPath: nil, scope: .focused)
+        let ids = Set(focused.map(\.id))
+        #expect(ids.contains(pinned.id))
+        #expect(ids.contains(recent.id))
+        #expect(try store.noteCountFiltered(by: nil, scope: .focused) == 2)
+    }
+
+    @Test func phase7SoftDeletePurgeAndEmptyTrash() throws {
+        let store = VaultStore()
+        let first = try store.createNote(title: "One")
+        let second = try store.createNote(title: "Two")
+
+        try store.softDeleteNote(id: first.id)
+        try store.softDeleteNote(id: second.id)
+        #expect(try store.deletedNoteCount() == 2)
+
+        try store.purgeNote(id: first.id)
+        #expect(try store.deletedNoteCount() == 1)
+
+        let purged = try store.emptyTrash()
+        #expect(purged == 1)
+        #expect(try store.deletedNoteCount() == 0)
+        #expect(try store.fetchNote(id: second.id) == nil)
+    }
+
+    @Test func phase7RestoreNoteReturnsToActiveList() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Restore", content: "Keep")
+        try store.softDeleteNote(id: note.id)
+        #expect(store.noteSummary(id: note.id) == nil)
+
+        try store.restoreNote(id: note.id)
+        #expect(store.noteSummary(id: note.id)?.title == "Restore")
+        #expect(try store.fetchNote(id: note.id)?.content == "Keep")
+    }
+
+    @Test func phase7TrashScopeListsDeletedOnly() throws {
+        let store = VaultStore()
+        let kept = try store.createNote(title: "Active")
+        let deleted = try store.createNote(title: "Gone")
+        try store.softDeleteNote(id: deleted.id)
+
+        let trash = try store.noteSummariesPage(offset: 0, limit: 100, tagPath: nil, scope: .trash)
+        #expect(trash.map(\.id).contains(deleted.id))
+        #expect(!trash.map(\.id).contains(kept.id))
     }
 }

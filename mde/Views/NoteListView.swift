@@ -12,6 +12,7 @@ struct NoteListView: View {
     @Binding var searchQuery: String
     let tagPath: String?
 
+    @State private var listScope: NoteListScope = .focused
     @State private var displayedRows: [NoteListRow] = []
     @State private var totalNoteCount = 0
     @State private var loadedNoteCount = VaultStore.listPageSize
@@ -20,6 +21,11 @@ struct NoteListView: View {
     @State private var errorMessage: String?
     @State private var mergePrimaryNote: NoteListItem?
     @State private var searchTask: Task<Void, Never>?
+    @State private var showEmptyTrashConfirmation = false
+
+    private var isTrashView: Bool {
+        tagPath == nil && listScope == .trash
+    }
 
     var body: some View {
         Group {
@@ -28,7 +34,7 @@ struct NoteListView: View {
             } else if displayedRows.isEmpty {
                 ContentUnavailableView(
                     emptyTitle,
-                    systemImage: "note.text",
+                    systemImage: emptySystemImage,
                     description: Text(emptyDescription)
                 )
             } else {
@@ -39,17 +45,21 @@ struct NoteListView: View {
                             .id(row.rowIdentity)
                             .tag(row.id)
                             .contextMenu {
-                                if let note = store.noteSummary(id: row.id) {
+                                if isTrashView {
+                                    trashContextMenu(for: row)
+                                } else if let note = store.noteSummary(id: row.id) {
                                     noteContextMenu(for: note)
+                                } else {
+                                    rowContextMenu(for: row)
                                 }
                             }
                             .onAppear {
-                                if let note = store.noteSummary(id: row.id) {
-                                    loadMoreIfNeeded(after: note)
+                                if row.id == displayedRows.last?.id {
+                                    loadMoreIfNeeded()
                                 }
                             }
                     }
-                    .onDelete(perform: deleteNotes)
+                    .onDelete(perform: isTrashView ? purgeNotes : deleteNotes)
 
                     if hasMoreNotes {
                         HStack {
@@ -69,20 +79,49 @@ struct NoteListView: View {
             }
         }
         .searchable(text: $searchQuery, prompt: "Search notes")
-        .navigationTitle("Notes")
-        .accessibilityLabel(AccessibilityLabels.noteList)
+        .navigationTitle(navigationTitle)
+        .accessibilityLabel(isTrashView ? AccessibilityLabels.trashList : AccessibilityLabels.noteList)
         .accessibilityIdentifier("note-list")
         #if os(macOS)
         .focusSection()
         #endif
         .toolbar {
             ToolbarItem {
-                Button(action: addNote) {
-                    Label("New Note", systemImage: "plus")
+                Menu {
+                    ForEach(NoteListScope.allCases) { scope in
+                        Button {
+                            listScope = scope
+                            reload(resetLoadedWindow: true)
+                        } label: {
+                            Label(scope.rawValue, systemImage: scope.systemImage)
+                        }
+                        .disabled(tagPath != nil && scope != .all)
+                    }
+                } label: {
+                    Label(listScope.rawValue, systemImage: listScope.systemImage)
                 }
-                .keyboardShortcut("n", modifiers: .command)
-                .accessibilityLabel("New note")
-                .help("Create a new note")
+                .disabled(tagPath != nil)
+                .accessibilityLabel(AccessibilityLabels.noteListScope(listScope.rawValue))
+            }
+
+            if !isTrashView {
+                ToolbarItem {
+                    Button(action: addNote) {
+                        Label("New Note", systemImage: "plus")
+                    }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .accessibilityLabel("New note")
+                    .help("Create a new note")
+                }
+            }
+
+            if isTrashView, !displayedRows.isEmpty {
+                ToolbarItem {
+                    Button("Empty Trash", role: .destructive) {
+                        showEmptyTrashConfirmation = true
+                    }
+                    .accessibilityLabel(AccessibilityLabels.emptyTrash)
+                }
             }
         }
         .onAppear { reload(resetLoadedWindow: true) }
@@ -98,6 +137,18 @@ struct NoteListView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .confirmationDialog(
+            "Empty Trash?",
+            isPresented: $showEmptyTrashConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(totalNoteCount) Notes Permanently", role: .destructive) {
+                emptyTrash()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone. Deleted notes will be removed from the vault database.")
         }
         .sheet(item: $mergePrimaryNote) { primary in
             MergeNotesSheet(
@@ -119,13 +170,29 @@ struct NoteListView: View {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var navigationTitle: String {
+        if isTrashView { return "Trash" }
+        return "Notes"
+    }
+
+    private var emptySystemImage: String {
+        if isTrashView { return "trash" }
+        return "note.text"
+    }
+
     private var emptyTitle: String {
+        if isTrashView { return "Trash is empty" }
         if tagPath != nil { return "No notes match this tag" }
+        if listScope == .focused { return "No pinned or recent notes" }
         return "No notes yet"
     }
 
     private var emptyDescription: String {
+        if isTrashView { return "Deleted notes appear here until you empty trash." }
         if tagPath != nil { return "Try another tag or create a note with this tag inline." }
+        if listScope == .focused {
+            return "Pin notes or edit them within \(NoteListPolicy.recentDays) days, or switch to All Notes."
+        }
         return "Create your first note to get started."
     }
 
@@ -175,6 +242,24 @@ struct NoteListView: View {
         }
     }
 
+    @ViewBuilder
+    private func rowContextMenu(for row: NoteListRow) -> some View {
+        Button("Delete", role: .destructive) {
+            deleteRow(row)
+        }
+    }
+
+    @ViewBuilder
+    private func trashContextMenu(for row: NoteListRow) -> some View {
+        Button("Restore") {
+            restoreRow(row)
+        }
+
+        Button("Delete Permanently", role: .destructive) {
+            purgeRow(row)
+        }
+    }
+
     private var hasMoreNotes: Bool {
         displayedRows.count < totalNoteCount
     }
@@ -185,11 +270,18 @@ struct NoteListView: View {
                 loadedNoteCount = VaultStore.listPageSize
             }
             let limit = max(loadedNoteCount, VaultStore.listPageSize)
-            let page = try store.noteSummariesPage(offset: 0, limit: limit, tagPath: tagPath)
+            let page = try store.noteSummariesPage(
+                offset: 0,
+                limit: limit,
+                tagPath: tagPath,
+                scope: listScope
+            )
             displayedRows = page.map { NoteListRow(item: $0, store: store) }
-            totalNoteCount = try store.noteCountFiltered(by: tagPath)
+            totalNoteCount = try store.noteCountFiltered(by: tagPath, scope: listScope)
             loadedNoteCount = displayedRows.count
-            if let selectedNoteID, !displayedRows.contains(where: { $0.id == selectedNoteID }) {
+            if !isTrashView,
+               let selectedNoteID,
+               !displayedRows.contains(where: { $0.id == selectedNoteID }) {
                 self.selectedNoteID = displayedRows.first?.id
             }
         } catch {
@@ -197,8 +289,8 @@ struct NoteListView: View {
         }
     }
 
-    private func loadMoreIfNeeded(after note: NoteListItem) {
-        guard note.id == displayedRows.last?.id, hasMoreNotes, !isLoadingMore else { return }
+    private func loadMoreIfNeeded() {
+        guard hasMoreNotes, !isLoadingMore else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
 
@@ -206,7 +298,8 @@ struct NoteListView: View {
             let next = try store.noteSummariesPage(
                 offset: displayedRows.count,
                 limit: VaultStore.listPageSize,
-                tagPath: tagPath
+                tagPath: tagPath,
+                scope: listScope
             )
             displayedRows.append(contentsOf: next.map { NoteListRow(item: $0, store: store) })
             loadedNoteCount = displayedRows.count
@@ -264,6 +357,22 @@ struct NoteListView: View {
         }
     }
 
+    private func purgeNotes(at offsets: IndexSet) {
+        let ids = offsets.map { displayedRows[$0].id }
+        do {
+            for id in ids {
+                try store.purgeNote(id: id)
+            }
+            try store.flushPackageIfNeeded()
+            if let selectedNoteID, ids.contains(selectedNoteID) {
+                self.selectedNoteID = nil
+            }
+            reload(resetLoadedWindow: true)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func deleteNote(_ note: NoteListItem) {
         do {
             try store.softDeleteNote(id: note.id)
@@ -271,6 +380,52 @@ struct NoteListView: View {
             if selectedNoteID == note.id {
                 selectedNoteID = displayedRows.first(where: { $0.id != note.id })?.id
             }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteRow(_ row: NoteListRow) {
+        do {
+            try store.softDeleteNote(id: row.id)
+            try store.flushPackageIfNeeded()
+            if selectedNoteID == row.id {
+                selectedNoteID = displayedRows.first(where: { $0.id != row.id })?.id
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func restoreRow(_ row: NoteListRow) {
+        do {
+            try store.restoreNote(id: row.id)
+            try store.flushPackageIfNeeded()
+            reload(resetLoadedWindow: true)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func purgeRow(_ row: NoteListRow) {
+        do {
+            try store.purgeNote(id: row.id)
+            try store.flushPackageIfNeeded()
+            if selectedNoteID == row.id {
+                selectedNoteID = nil
+            }
+            reload(resetLoadedWindow: true)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func emptyTrash() {
+        do {
+            _ = try store.emptyTrash()
+            try store.flushPackageIfNeeded()
+            selectedNoteID = nil
+            reload(resetLoadedWindow: true)
         } catch {
             errorMessage = error.localizedDescription
         }

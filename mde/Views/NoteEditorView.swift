@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct NoteEditorView: View {
     let store: VaultStore
@@ -18,9 +19,13 @@ struct NoteEditorView: View {
     @State private var editorText = ""
     @State private var loadedNoteID: String?
     @State private var backlinks: [NoteListItem] = []
+    @State private var backlinksExpanded = false
+    @State private var backlinksLoaded = false
     @State private var errorMessage: String?
     @State private var pendingWikiLinkTitle: String?
     @State private var showCreateWikiLinkSheet = false
+    @State private var showExportPicker = false
+    @State private var exportDocument = MarkdownExportDocument()
 
     var body: some View {
         Group {
@@ -47,9 +52,7 @@ struct NoteEditorView: View {
                         .accessibilityLabel("Save error: \(autosaveError)")
                     }
 
-                    if !backlinks.isEmpty {
-                        backlinksPanel
-                    }
+                    backlinksSection(noteID: activeNoteID, title: summary.title)
 
                     PlatformMarkdownEditor(
                         text: $editorText,
@@ -69,16 +72,24 @@ struct NoteEditorView: View {
                 #if os(macOS)
                 .focusSection()
                 #endif
+                .toolbar {
+                    ToolbarItem {
+                        Button {
+                            prepareExport(noteID: activeNoteID)
+                        } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel(AccessibilityLabels.exportNote)
+                        .help("Export note as Markdown")
+                    }
+                }
                 .onAppear {
                     loadNote(id: activeNoteID)
-                    reloadBacklinks(noteID: activeNoteID, title: summary.title)
                 }
                 .onChange(of: noteID) { _, newID in
                     guard let newID else { return }
+                    resetBacklinksState()
                     loadNote(id: newID)
-                    if let summary = store.noteSummary(id: newID) {
-                        reloadBacklinks(noteID: newID, title: summary.title)
-                    }
                 }
                 .onChange(of: editorState.contentEpoch) { _, _ in
                     syncEditorFromStore(noteID: activeNoteID)
@@ -89,8 +100,16 @@ struct NoteEditorView: View {
                     }
                 }
                 .onChange(of: editorState.linksRevision) { _, _ in
-                    if let summary = store.noteSummary(id: activeNoteID) {
+                    if backlinksExpanded, backlinksLoaded,
+                       let summary = store.noteSummary(id: activeNoteID) {
                         reloadBacklinks(noteID: activeNoteID, title: summary.title)
+                    }
+                }
+                .onChange(of: backlinksExpanded) { _, expanded in
+                    if expanded, !backlinksLoaded,
+                       let summary = store.noteSummary(id: activeNoteID) {
+                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
+                        backlinksLoaded = true
                     }
                 }
                 .onChange(of: editorState.autosaveErrorMessage) { _, message in
@@ -109,6 +128,16 @@ struct NoteEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .fileExporter(
+            isPresented: $showExportPicker,
+            document: exportDocument,
+            contentType: .plainText,
+            defaultFilename: noteID.map { store.exportFilename(for: $0) } ?? "Note.md"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
+            }
+        }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -133,6 +162,49 @@ struct NoteEditorView: View {
     }
 
     @ViewBuilder
+    private func backlinksSection(noteID: String, title: String) -> some View {
+        DisclosureGroup(
+            isExpanded: $backlinksExpanded,
+            content: {
+                if backlinks.isEmpty {
+                    Text("No notes link here yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                        .accessibilityLabel(AccessibilityLabels.emptyBacklinks)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(backlinks) { backlink in
+                                Button(store.noteDisplayTitle(backlink)) {
+                                    selectedNoteID = backlink.id
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .accessibilityLabel(
+                                    AccessibilityLabels.backlink(title: store.noteDisplayTitle(backlink))
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.bottom, 8)
+                }
+            },
+            label: {
+                Text("Backlinks")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+        .accessibilityLabel(AccessibilityLabels.backlinksPanel)
+    }
+
+    @ViewBuilder
     private func shortcutButtons(noteID: String) -> some View {
         Group {
             Button("") { saveNow(noteID: noteID) }
@@ -151,37 +223,17 @@ struct NoteEditorView: View {
         .accessibilityHidden(true)
     }
 
-    private var backlinksPanel: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Backlinks")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .accessibilityAddTraits(.isHeader)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(backlinks) { backlink in
-                        Button(store.noteDisplayTitle(backlink)) {
-                            selectedNoteID = backlink.id
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityLabel(AccessibilityLabels.backlink(title: store.noteDisplayTitle(backlink)))
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.bottom, 8)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
     private func loadNote(id: String) {
         loadedNoteID = id
         if let note = try? store.fetchNote(id: id) {
             editorText = note.content
         }
+    }
+
+    private func resetBacklinksState() {
+        backlinks = []
+        backlinksExpanded = false
+        backlinksLoaded = false
     }
 
     private func syncEditorFromStore(noteID: String) {
@@ -196,6 +248,16 @@ struct NoteEditorView: View {
             backlinks = try store.fetchBacklinkSummaries(for: noteID, title: title)
         } catch {
             backlinks = []
+        }
+    }
+
+    private func prepareExport(noteID: String) {
+        do {
+            let markdown = try store.exportNoteAsMarkdown(id: noteID)
+            exportDocument = MarkdownExportDocument(text: markdown)
+            showExportPicker = true
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

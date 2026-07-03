@@ -8,8 +8,17 @@ import Foundation
 enum AccessibilityLabels {
     static let tagSidebar = "Tags"
     static let noteList = "Notes"
+    static let trashList = "Trash"
     static let noteEditor = "Note editor"
+    static let exportNote = "Export note as Markdown"
+    static let emptyTrash = "Empty trash permanently"
+    static let backlinksPanel = "Backlinks panel"
+    static let emptyBacklinks = "No notes link here yet"
     static let allTagsFilter = "All notes, show every tag"
+
+    static func noteListScope(_ scope: String) -> String {
+        "Note list filter, \(scope)"
+    }
 
     static func tagFilter(path: String, isSelected: Bool) -> String {
         let selection = isSelected ? "selected" : "not selected"

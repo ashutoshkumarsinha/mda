@@ -159,11 +159,30 @@ Run: `xcodebuild -only-testing:mdeTests/Phase6ObservabilityTests test`
 
 ---
 
+## Phase 7 — Product enhancements ✅
+
+Resource-aware UX improvements from the optimization roadmap:
+
+| Enhancement | Resource benefit |
+|-------------|------------------|
+| **Trash UI + purge** | Smaller DB, faster FTS after `VACUUM` |
+| **Export single note** | One `fetchNote` — no full vault export |
+| **Pinned & Recent default filter** | Smaller list working set (30-day window) |
+| **Empty trash** | Reclaim disk |
+| **On-demand backlinks** | SQL only when disclosure expands |
+| **Reduce Motion** | Already wired in editor (Phase 3) |
+
+### Tests (`Phase7EnhancementTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase7EnhancementTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
-| 2026-07-03 | Phase 6: p95 style gate, NFR-03 memory ceiling, persist size regression, DEBUG developer overlay, iOS CI smoke |
+| 2026-07-03 | Phase 7: trash purge UI, note export, focused list filter, on-demand backlinks |
 | 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |

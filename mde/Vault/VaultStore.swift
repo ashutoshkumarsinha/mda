@@ -10,6 +10,7 @@ import Observation
 enum VaultStoreError: LocalizedError {
     case duplicateTitle(String)
     case databaseUnavailable
+    case noteNotFound
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,8 @@ enum VaultStoreError: LocalizedError {
             return "A note titled \"\(title)\" already exists."
         case .databaseUnavailable:
             return "Vault database is not available."
+        case .noteNotFound:
+            return "Note was not found."
         }
     }
 }
@@ -351,17 +354,22 @@ final class VaultStore {
         }
     }
 
-    func noteSummariesPage(offset: Int, limit: Int = listPageSize, tagPath: String?) throws -> [NoteListItem] {
+    func noteSummariesPage(
+        offset: Int,
+        limit: Int = listPageSize,
+        tagPath: String?,
+        scope: NoteListScope = .all
+    ) throws -> [NoteListItem] {
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
-            try fetchNoteSummariesPage(offset: offset, limit: limit, tagPath: tagPath, in: db)
+            try fetchNoteSummariesPage(offset: offset, limit: limit, tagPath: tagPath, scope: scope, in: db)
         }
     }
 
-    func noteCountFiltered(by tagPath: String?) throws -> Int {
+    func noteCountFiltered(by tagPath: String?, scope: NoteListScope = .all) throws -> Int {
         guard let dbQueue else { return 0 }
         return try dbQueue.read { db in
-            try countNoteSummaries(tagPath: tagPath, in: db)
+            try countNoteSummaries(tagPath: tagPath, scope: scope, in: db)
         }
     }
 
@@ -550,6 +558,83 @@ final class VaultStore {
         noteChanged(primaryID)
         others.forEach { noteChanged($0.id) }
         return primary
+    }
+
+    // MARK: - Trash & purge
+
+    func deletedNoteCount() throws -> Int {
+        guard let dbQueue else { return 0 }
+        return try dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE is_deleted = 1") ?? 0
+        }
+    }
+
+    func restoreNote(id: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                UPDATE note
+                SET is_deleted = 0, updated_at = ?, client_updated_at = ?, version = version + 1
+                WHERE id = ? AND is_deleted = 1
+                """,
+                arguments: [Date(), Date(), id]
+            )
+            guard let note = try Note.filter(Note.Columns.id == id).fetchOne(db) else {
+                throw VaultStoreError.noteNotFound
+            }
+            var updated = note
+            updated.checksum = SyncChecksum.compute(for: updated)
+            try updated.update(db)
+            try NoteIndexer.reindexTags(for: id, content: note.content, in: db)
+            try LinkIndexer.reindexLinks(for: id, content: note.content, in: db)
+        }
+
+        try refreshAll()
+        listState.bumpRevision()
+        editorState.bumpLinksRevision()
+        noteChanged(id)
+    }
+
+    func purgeNote(id: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            guard try Note
+                .filter(Note.Columns.id == id)
+                .filter(Note.Columns.isDeleted == true)
+                .fetchOne(db) != nil else {
+                throw VaultStoreError.noteNotFound
+            }
+            try purgeAuxiliaryRows(for: id, in: db)
+            try db.execute(sql: "DELETE FROM note WHERE id = ? AND is_deleted = 1", arguments: [id])
+        }
+        try reloadTagTree()
+        editorState.bumpLinksRevision()
+        markPackageDirty()
+    }
+
+    @discardableResult
+    func emptyTrash() throws -> Int {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        let count = try deletedNoteCount()
+        guard count > 0 else { return 0 }
+
+        try dbQueue.write { db in
+            let ids = try String.fetchAll(db, sql: "SELECT id FROM note WHERE is_deleted = 1")
+            for id in ids {
+                try purgeAuxiliaryRows(for: id, in: db)
+            }
+            try db.execute(sql: "DELETE FROM note WHERE is_deleted = 1")
+        }
+        if packageURL != nil {
+            try dbQueue.write { db in
+                try db.execute(sql: "VACUUM")
+            }
+        }
+        try reloadTagTree()
+        editorState.bumpLinksRevision()
+        markPackageDirty()
+        return count
     }
 
     // MARK: - Sync
@@ -742,6 +827,11 @@ final class VaultStore {
             try? enqueueSync(noteID: noteID)
         }
         onNoteChanged?(noteID)
+    }
+
+    private func purgeAuxiliaryRows(for noteID: String, in db: Database) throws {
+        try db.execute(sql: "DELETE FROM sync_queue WHERE note_id = ?", arguments: [noteID])
+        try db.execute(sql: "DELETE FROM note_sync_base WHERE note_id = ?", arguments: [noteID])
     }
 
     private func refreshAll() throws {
