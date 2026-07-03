@@ -732,3 +732,71 @@ struct Phase1OptimizationTests {
         #expect(dbMtimeFlushed != dbMtimeBefore || metaMtimeFlushed != metaMtimeBefore)
     }
 }
+
+// MARK: - Phase 2 optimization
+
+struct Phase2OptimizationTests {
+
+    @Test func phase2UsesWALJournalMode() throws {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("db")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let dbQueue = try DatabaseConfiguration.makeQueue(path: tempURL.path)
+        try DatabaseSchema.migrate(dbQueue)
+        try dbQueue.read { db in
+            let mode = try DatabaseConfiguration.journalMode(on: db)
+            #expect(mode == "wal")
+        }
+    }
+
+    @Test func phase2ListOrderIndexExists() throws {
+        let dbQueue = try DatabaseConfiguration.makeQueue()
+        try DatabaseSchema.migrate(dbQueue)
+        try dbQueue.read { db in
+            let index = try String.fetchOne(db, sql: """
+                SELECT name FROM sqlite_master
+                WHERE type = 'index' AND name = 'idx_note_list_order'
+            """)
+            #expect(index == "idx_note_list_order")
+        }
+    }
+
+    @Test func phase2PaginatesNoteSummaries() throws {
+        let store = VaultStore()
+        for index in 0..<150 {
+            _ = try store.createNote(title: "Note \(index)")
+        }
+
+        let page1 = try store.noteSummariesPage(offset: 0, limit: 100, tagPath: nil)
+        let page2 = try store.noteSummariesPage(offset: 100, limit: 100, tagPath: nil)
+
+        #expect(page1.count == 100)
+        #expect(page2.count == 50)
+        #expect(page1.first?.id != page2.first?.id)
+        #expect(try store.noteCountFiltered(by: nil) == 150)
+    }
+
+    @Test func phase2SkipsBackupWhenNoPendingMigrations() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        _ = try store.createNote(title: "Stable")
+        try store.attachToPackage(at: tempDir)
+
+        let backupURL = VaultPaths.backupDatabaseURL(in: tempDir)
+        let mtimeBefore = try FileManager.default.attributesOfItem(atPath: backupURL.path)[.modificationDate] as? Date
+        #expect(mtimeBefore != nil)
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        let reopened = VaultStore()
+        try reopened.attachToPackage(at: tempDir)
+        let mtimeAfter = try FileManager.default.attributesOfItem(atPath: backupURL.path)[.modificationDate] as? Date
+        #expect(mtimeAfter == mtimeBefore)
+    }
+}

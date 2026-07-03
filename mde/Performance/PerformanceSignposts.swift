@@ -14,6 +14,7 @@ enum PerformanceSignpost {
     case vaultUpdateNote
     case vaultPersistPackage
     case vaultExportDatabase
+    case vaultListPage
     case markdownParse
     case markdownStyle
     case syncPerform
@@ -27,6 +28,7 @@ enum PerformanceSignpost {
         case .vaultUpdateNote: "vault_update_note"
         case .vaultPersistPackage: "vault_persist_package"
         case .vaultExportDatabase: "vault_export_database"
+        case .vaultListPage: "vault_list_page"
         case .markdownParse: "markdown_parse"
         case .markdownStyle: "markdown_style"
         case .syncPerform: "sync_perform"

@@ -12,6 +12,9 @@ struct NoteListView: View {
     let tagPath: String?
 
     @State private var displayedNotes: [NoteListItem] = []
+    @State private var totalNoteCount = 0
+    @State private var loadedNoteCount = VaultStore.listPageSize
+    @State private var isLoadingMore = false
     @State private var searchResults: [SearchResult] = []
     @State private var errorMessage: String?
     @State private var mergePrimaryNote: NoteListItem?
@@ -35,8 +38,26 @@ struct NoteListView: View {
                             .contextMenu {
                                 noteContextMenu(for: note)
                             }
+                            .onAppear {
+                                loadMoreIfNeeded(after: note)
+                            }
                     }
                     .onDelete(perform: deleteNotes)
+
+                    if hasMoreNotes {
+                        HStack {
+                            Spacer()
+                            if isLoadingMore {
+                                ProgressView()
+                            } else {
+                                Text("Scroll for more notes")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
+                    }
                 }
             }
         }
@@ -57,9 +78,9 @@ struct NoteListView: View {
                 .help("Create a new note")
             }
         }
-        .onAppear(perform: reload)
-        .onChange(of: tagPath) { _, _ in reload() }
-        .onChange(of: store.listRevision) { _, _ in reload() }
+        .onAppear { reload(resetLoadedWindow: true) }
+        .onChange(of: tagPath) { _, _ in reload(resetLoadedWindow: true) }
+        .onChange(of: store.listRevision) { _, _ in reload(resetLoadedWindow: false) }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(query: newValue)
         }
@@ -147,12 +168,40 @@ struct NoteListView: View {
         }
     }
 
-    private func reload() {
+    private var hasMoreNotes: Bool {
+        displayedNotes.count < totalNoteCount
+    }
+
+    private func reload(resetLoadedWindow: Bool = false) {
         do {
-            displayedNotes = try store.noteSummariesFiltered(by: tagPath)
+            if resetLoadedWindow {
+                loadedNoteCount = VaultStore.listPageSize
+            }
+            let limit = max(loadedNoteCount, VaultStore.listPageSize)
+            displayedNotes = try store.noteSummariesPage(offset: 0, limit: limit, tagPath: tagPath)
+            totalNoteCount = try store.noteCountFiltered(by: tagPath)
+            loadedNoteCount = displayedNotes.count
             if let selectedNoteID, !displayedNotes.contains(where: { $0.id == selectedNoteID }) {
                 self.selectedNoteID = displayedNotes.first?.id
             }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadMoreIfNeeded(after note: NoteListItem) {
+        guard note.id == displayedNotes.last?.id, hasMoreNotes, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        do {
+            let next = try store.noteSummariesPage(
+                offset: displayedNotes.count,
+                limit: VaultStore.listPageSize,
+                tagPath: tagPath
+            )
+            displayedNotes.append(contentsOf: next)
+            loadedNoteCount = displayedNotes.count
         } catch {
             errorMessage = error.localizedDescription
         }

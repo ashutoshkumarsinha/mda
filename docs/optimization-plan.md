@@ -19,6 +19,7 @@ Establish budgets before changing behavior. View signposts in **Instruments → 
 | `vault_resolve_links` | `VaultStore.resolvePendingLinks()` |
 | `vault_update_note` | (via `measureUpdateNote`) |
 | `vault_persist_package` | `VaultStore.persistToPackageIfNeeded()` |
+| `vault_list_page` | `VaultStore.fetchNoteSummariesPage` |
 | `vault_export_database` | `VaultStore.exportDatabase()` |
 | `markdown_parse` | `MarkdownParseActor.parse()` |
 | `markdown_style` | `MarkdownStyler.apply()` |
@@ -60,9 +61,25 @@ Run: `xcodebuild -only-testing:mdeTests/Phase1OptimizationTests test`
 
 ---
 
+## Phase 2 — Data layer & disk ✅
+
+1. **SQL list projection** — completed in Phase 1 (`VaultStore+ListQuery`); Phase 2 adds `LIMIT`/`OFFSET` paging.
+2. **WAL + pragma tuning** — `DatabaseConfiguration` sets WAL, `cache_size`, `mmap_size`, `temp_store`.
+3. **List-order index** — migration `v2_list_query_index` on `(is_deleted, is_pinned, updated_at)`.
+4. **Migration backup policy** — backup only when pending schema migrations exist (not every open).
+5. **Package lifecycle flush** — `vaultPackageLifecycle` flushes on iOS background / macOS terminate; 5 min periodic persist if dirty.
+6. **Windowed note list** — `noteSummariesPage` + infinite scroll in `NoteListView` (100 rows/page).
+
+### Tests (`Phase2OptimizationTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase2OptimizationTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
+| 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |
 | 2026-07-03 | Phase 0: signposts, budgets, baseline tests, memory probe |

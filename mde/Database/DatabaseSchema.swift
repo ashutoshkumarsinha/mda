@@ -104,14 +104,39 @@ enum DatabaseSchema {
             }
         }
 
+        migrator.registerMigration("v2_list_query_index") { db in
+            try db.create(
+                index: "idx_note_list_order",
+                on: "note",
+                columns: ["is_deleted", "is_pinned", "updated_at"]
+            )
+        }
+
         return migrator
     }
 
+    private static let migrationIdentifiers = ["v1_initial_schema", "v2_list_query_index"]
+
     static func migrate(_ dbQueue: DatabaseQueue, databaseURL: URL? = nil) throws {
         if let databaseURL {
-            try backupDatabaseIfNeeded(at: databaseURL)
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: databaseURL.path) {
+                let backupURL = VaultPaths.backupDatabaseURL(in: databaseURL.deletingLastPathComponent())
+                let hasPending = try dbQueue.read { db in
+                    try hasPendingMigrations(on: db)
+                }
+                let needsInitialBackup = !fileManager.fileExists(atPath: backupURL.path)
+                if hasPending || needsInitialBackup {
+                    try backupDatabaseIfNeeded(at: databaseURL)
+                }
+            }
         }
         try migrator.migrate(dbQueue)
+    }
+
+    private static func hasPendingMigrations(on db: Database) throws -> Bool {
+        let applied = try migrator.appliedIdentifiers(db)
+        return migrationIdentifiers.contains { !applied.contains($0) }
     }
 
     private static func backupDatabaseIfNeeded(at databaseURL: URL) throws {

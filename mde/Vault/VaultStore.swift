@@ -44,6 +44,7 @@ final class VaultStore {
 
     private var autosaveTask: Task<Void, Never>?
     private var persistTask: Task<Void, Never>?
+    private var periodicPersistTask: Task<Void, Never>?
     private var packageDirty = false
     private var titleIndex: [String: String] = [:]
 
@@ -103,9 +104,9 @@ final class VaultStore {
         } else if let existing = dbQueue {
             let exported = try Self.exportDatabase(from: existing)
             try exported.write(to: databaseURL, options: .atomic)
-            dbQueue = try DatabaseQueue(path: databaseURL.path)
+            dbQueue = try DatabaseConfiguration.makeQueue(path: databaseURL.path)
         } else {
-            dbQueue = try DatabaseQueue(path: databaseURL.path)
+            dbQueue = try DatabaseConfiguration.makeQueue(path: databaseURL.path)
         }
 
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
@@ -333,6 +334,20 @@ final class VaultStore {
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
             try fetchNoteSummariesFiltered(by: tagPath, in: db)
+        }
+    }
+
+    func noteSummariesPage(offset: Int, limit: Int = listPageSize, tagPath: String?) throws -> [NoteListItem] {
+        guard let dbQueue else { return [] }
+        return try dbQueue.read { db in
+            try fetchNoteSummariesPage(offset: offset, limit: limit, tagPath: tagPath, in: db)
+        }
+    }
+
+    func noteCountFiltered(by tagPath: String?) throws -> Int {
+        guard let dbQueue else { return 0 }
+        return try dbQueue.read { db in
+            try countNoteSummaries(tagPath: tagPath, in: db)
         }
     }
 
@@ -795,18 +810,33 @@ final class VaultStore {
         noteSummaries.removeAll { $0.id == id }
     }
 
+    private static let packagePersistDebounce: Duration = .seconds(3)
+    private static let packagePersistInterval: Duration = .seconds(300)
+
     private func schedulePersistToPackage() {
         persistTask?.cancel()
         persistTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: Self.packagePersistDebounce)
             guard !Task.isCancelled, packageDirty else { return }
             try? persistToPackageIfNeeded()
+        }
+        ensurePeriodicPersistLoop()
+    }
+
+    private func ensurePeriodicPersistLoop() {
+        guard periodicPersistTask == nil else { return }
+        periodicPersistTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.packagePersistInterval)
+                guard !Task.isCancelled, packageDirty else { continue }
+                try? persistToPackageIfNeeded()
+            }
         }
     }
 
     private func openInMemoryDatabase() {
         do {
-            dbQueue = try DatabaseQueue()
+            dbQueue = try DatabaseConfiguration.makeQueue()
             try DatabaseSchema.migrate(dbQueue!)
             try refreshAll()
         } catch {
@@ -824,7 +854,7 @@ final class VaultStore {
             throw VaultError.databaseCorrupt(backupAvailable: false)
         }
 
-        let queue = try DatabaseQueue(path: url.path)
+        let queue = try DatabaseConfiguration.makeQueue(path: url.path)
         try queue.read { db in
             let result = try String.fetchOne(db, sql: "PRAGMA integrity_check") ?? "failed"
             guard result == "ok" else {
@@ -855,7 +885,7 @@ final class VaultStore {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("db")
         try data.write(to: tempURL, options: .atomic)
-        return try DatabaseQueue(path: tempURL.path)
+        return try DatabaseConfiguration.makeQueue(path: tempURL.path)
     }
 
     private static func exportDatabase(from source: DatabaseQueue) throws -> Data {
@@ -865,7 +895,7 @@ final class VaultStore {
                 .appendingPathExtension("db")
             defer { try? FileManager.default.removeItem(at: url) }
 
-            let destination = try DatabaseQueue(path: url.path)
+            let destination = try DatabaseConfiguration.makeQueue(path: url.path)
             try source.backup(to: destination)
             try destination.close()
             return try Data(contentsOf: url)
