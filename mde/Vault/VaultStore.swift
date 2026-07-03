@@ -27,20 +27,32 @@ final class VaultStore {
     private var dbQueue: DatabaseQueue?
     private var packageURL: URL?
 
+    let listState = VaultListState()
+    let editorState = VaultEditorState()
+
     var noteSummaries: [NoteListItem] = []
-    var tagTree: [TagNode] = []
 
     /// Bumps when list rows change (titles, pins, ordering).
-    private(set) var listRevision = 0
+    var listRevision: Int { listState.revision }
     /// Bumps when wiki-link graph may have changed.
-    private(set) var linksRevision = 0
+    var linksRevision: Int { editorState.linksRevision }
     /// Bumps when a note body changes (editor reload from store).
-    private(set) var contentEpoch = 0
+    var contentEpoch: Int { editorState.contentEpoch }
+
+    var tagTree: [TagNode] {
+        get { listState.tagTree }
+        set { listState.tagTree = newValue }
+    }
 
     var onNoteChanged: ((String) -> Void)?
 
+    private(set) var isPackageAttached = false
     var needsDatabaseRecovery = false
-    var autosaveErrorMessage: String?
+
+    var autosaveErrorMessage: String? {
+        get { editorState.autosaveErrorMessage }
+        set { editorState.autosaveErrorMessage = newValue }
+    }
 
     private var autosaveTask: Task<Void, Never>?
     private var persistTask: Task<Void, Never>?
@@ -111,6 +123,7 @@ final class VaultStore {
 
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
         needsDatabaseRecovery = false
+        isPackageAttached = true
         try refreshAll()
     }
 
@@ -143,6 +156,7 @@ final class VaultStore {
         dbQueue = try Self.openDatabase(from: snapshot.databaseData)
         try DatabaseSchema.migrate(dbQueue!)
         packageURL = nil
+        isPackageAttached = false
         try refreshAll()
     }
 
@@ -297,8 +311,8 @@ final class VaultStore {
             try removeNoteFromCaches(id: id)
         }
         try reloadTagTree()
-        listRevision += 1
-        linksRevision += 1
+        listState.bumpRevision()
+        editorState.bumpLinksRevision()
         if notifySync {
             ids.forEach { noteChanged($0) }
         }
@@ -323,8 +337,8 @@ final class VaultStore {
         }
         try removeNoteFromCaches(id: id)
         try reloadTagTree()
-        listRevision += 1
-        linksRevision += 1
+        listState.bumpRevision()
+        editorState.bumpLinksRevision()
         if notifySync {
             noteChanged(id)
         }
@@ -472,7 +486,7 @@ final class VaultStore {
         if let note = try fetchNote(id: id) {
             let snippet = NoteListItem.makeSnippet(from: note.content)
             insertSummarySorted(NoteListItem(note: note, snippet: snippet))
-            listRevision += 1
+            listState.bumpRevision()
         }
         noteChanged(id)
     }
@@ -531,8 +545,8 @@ final class VaultStore {
         }
 
         try refreshAll()
-        listRevision += 1
-        linksRevision += 1
+        listState.bumpRevision()
+        editorState.bumpLinksRevision()
         noteChanged(primaryID)
         others.forEach { noteChanged($0.id) }
         return primary
@@ -662,8 +676,8 @@ final class VaultStore {
             }
         }
         try refreshAll()
-        listRevision += 1
-        linksRevision += 1
+        listState.bumpRevision()
+        editorState.bumpLinksRevision()
         if notifySync {
             noteChanged(payload.noteID)
         }
@@ -797,11 +811,11 @@ final class VaultStore {
         let oldLinks = Set(WikiLinkExtractor.extractTitles(from: previousContent ?? ""))
         let newLinks = Set(WikiLinkExtractor.extractTitles(from: note.content))
         if oldLinks != newLinks {
-            linksRevision += 1
+            editorState.bumpLinksRevision()
         }
 
-        contentEpoch += 1
-        listRevision += 1
+        editorState.bumpContentEpoch()
+        listState.bumpRevision()
     }
 
     private func insertSummarySorted(_ item: NoteListItem) {

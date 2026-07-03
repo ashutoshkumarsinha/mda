@@ -6,8 +6,24 @@
 import SwiftUI
 
 enum EditorTypography {
+    /// Maximum Dynamic Type used in the editor for layout stability.
+    static let maxEditorDynamicType: DynamicTypeSize = .accessibility3
+
     static func baseFontSize(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
-        switch dynamicTypeSize {
+        baseFontSizePoints(for: cappedDynamicType(dynamicTypeSize))
+    }
+
+    private static func cappedDynamicType(_ size: DynamicTypeSize) -> DynamicTypeSize {
+        switch size {
+        case .accessibility4, .accessibility5:
+            return maxEditorDynamicType
+        default:
+            return size
+        }
+    }
+
+    private static func baseFontSizePoints(for cappedSize: DynamicTypeSize) -> CGFloat {
+        switch cappedSize {
         case .xSmall: 13
         case .small: 14
         case .medium: 15

@@ -7,6 +7,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: VaultStore
+    /// When false, sync bootstrap waits until the vault package is attached on disk.
+    var isPackageBound: Bool = true
 
     @State private var selectedTagPath: String?
     @State private var selectedNoteID: String?
@@ -16,6 +18,10 @@ struct ContentView: View {
     @State private var syncCoordinator: SyncCoordinator?
     @State private var showRecoveryAlert = false
     @State private var recoveryError: String?
+
+    #if os(macOS)
+    @State private var splitVisibility: NavigationSplitViewVisibility = .all
+    #endif
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -94,87 +100,90 @@ struct ContentView: View {
                     .syncLifecycle(coordinator: syncCoordinator, networkMonitor: SyncNetworkMonitor())
             }
         }
-        .task {
-            if syncCoordinator == nil {
-                let coordinator = SyncCoordinator(store: store)
-                syncCoordinator = coordinator
-                await coordinator.bootstrap()
-            }
+        .task(id: isPackageBound) {
+            guard isPackageBound, syncCoordinator == nil else { return }
+            let coordinator = SyncCoordinator(store: store)
+            syncCoordinator = coordinator
+            await coordinator.bootstrap()
         }
     }
 
     private var splitLayout: some View {
-        NavigationSplitView {
-            TagSidebarView(store: store, selectedTagPath: $selectedTagPath)
+        #if os(macOS)
+        NavigationSplitView(columnVisibility: $splitVisibility) {
+            TagSidebarView(listState: store.listState, selectedTagPath: $selectedTagPath)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
         } content: {
             NoteListView(
                 store: store,
+                listState: store.listState,
                 selectedNoteID: $selectedNoteID,
                 searchQuery: $searchQuery,
                 tagPath: selectedTagPath
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } detail: {
+            detailColumn
+        }
+        .navigationSplitViewStyle(.balanced)
+        #else
+        NavigationSplitView {
+            TagSidebarView(listState: store.listState, selectedTagPath: $selectedTagPath)
+                .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
+        } content: {
+            NoteListView(
+                store: store,
+                listState: store.listState,
+                selectedNoteID: $selectedNoteID,
+                searchQuery: $searchQuery,
+                tagPath: selectedTagPath
+            )
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+        } detail: {
+            detailColumn
+        }
+        .navigationSplitViewStyle(.balanced)
+        #endif
+    }
+
+    @ViewBuilder
+    private var detailColumn: some View {
+        if selectedNoteID != nil {
             NoteEditorView(
                 store: store,
+                editorState: store.editorState,
+                listState: store.listState,
                 noteID: selectedNoteID,
                 selectedNoteID: $selectedNoteID
             )
+        } else {
+            ContentUnavailableView(
+                "Select a note",
+                systemImage: "square.and.pencil",
+                description: Text("Choose a note from the list or create a new one.")
+            )
+            .accessibilityLabel(AccessibilityLabels.emptyNoteSelection)
         }
-        .navigationSplitViewStyle(.balanced)
     }
 
     #if os(iOS)
     private var compactLayout: some View {
         NavigationStack {
-            Group {
-                switch compactScreen {
-                case .tags:
-                    TagSidebarView(store: store, selectedTagPath: $selectedTagPath)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Notes") {
-                                    compactScreen = .notes
-                                }
-                            }
-                        }
-                case .notes:
-                    NoteListView(
-                        store: store,
-                        selectedNoteID: $selectedNoteID,
-                        searchQuery: $searchQuery,
-                        tagPath: selectedTagPath
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("Tags") {
-                                compactScreen = .tags
-                            }
-                        }
-                    }
-                case .editor:
-                    if let selectedNoteID {
-                        NoteEditorView(
-                            store: store,
-                            noteID: selectedNoteID,
-                            selectedNoteID: $selectedNoteID
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("Back") {
-                                    compactScreen = .notes
-                                }
-                            }
-                        }
-                    } else {
-                        ContentUnavailableView(
-                            "Select a note",
-                            systemImage: "square.and.pencil",
-                            description: Text("Choose a note from the list.")
-                        )
-                    }
-                }
+            ZStack {
+                tagsCompactLayer
+                    .opacity(compactScreen == .tags ? 1 : 0)
+                    .allowsHitTesting(compactScreen == .tags)
+                    .accessibilityHidden(compactScreen != .tags)
+
+                notesCompactLayer
+                    .opacity(compactScreen == .notes ? 1 : 0)
+                    .allowsHitTesting(compactScreen == .notes)
+                    .accessibilityHidden(compactScreen != .notes)
+
+                editorCompactLayer
+                    .opacity(compactScreen == .editor ? 1 : 0)
+                    .allowsHitTesting(compactScreen == .editor)
+                    .accessibilityHidden(compactScreen != .editor)
             }
             .navigationTitle(compactNavigationTitle)
         }
@@ -184,6 +193,54 @@ struct ContentView: View {
             }
             if newID == nil, compactScreen == .editor {
                 compactScreen = .notes
+            }
+        }
+    }
+
+    private var tagsCompactLayer: some View {
+        TagSidebarView(listState: store.listState, selectedTagPath: $selectedTagPath)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Notes") {
+                        compactScreen = .notes
+                    }
+                }
+            }
+    }
+
+    private var notesCompactLayer: some View {
+        NoteListView(
+            store: store,
+            listState: store.listState,
+            selectedNoteID: $selectedNoteID,
+            searchQuery: $searchQuery,
+            tagPath: selectedTagPath
+        )
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Tags") {
+                    compactScreen = .tags
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var editorCompactLayer: some View {
+        if let selectedNoteID {
+            NoteEditorView(
+                store: store,
+                editorState: store.editorState,
+                listState: store.listState,
+                noteID: selectedNoteID,
+                selectedNoteID: $selectedNoteID
+            )
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Back") {
+                        compactScreen = .notes
+                    }
+                }
             }
         }
     }

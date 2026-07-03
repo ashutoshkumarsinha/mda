@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct TagSidebarView: View {
-    @Bindable var store: VaultStore
+    @Bindable var listState: VaultListState
     @Binding var selectedTagPath: String?
 
     var body: some View {
@@ -18,7 +18,7 @@ struct TagSidebarView: View {
                 .accessibilityLabel(AccessibilityLabels.allTagsFilter)
                 .accessibilityAddTraits(selectedTagPath == nil ? .isSelected : [])
 
-            ForEach(store.tagTree) { tag in
+            ForEach(listState.tagTree) { tag in
                 Text("#\(tag.path)")
                     .tag(Optional(tag.path))
                     .padding(.leading, CGFloat(tag.level) * 12)

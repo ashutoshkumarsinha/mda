@@ -6,12 +6,13 @@
 import SwiftUI
 
 struct NoteListView: View {
-    @Bindable var store: VaultStore
+    let store: VaultStore
+    @Bindable var listState: VaultListState
     @Binding var selectedNoteID: String?
     @Binding var searchQuery: String
     let tagPath: String?
 
-    @State private var displayedNotes: [NoteListItem] = []
+    @State private var displayedRows: [NoteListRow] = []
     @State private var totalNoteCount = 0
     @State private var loadedNoteCount = VaultStore.listPageSize
     @State private var isLoadingMore = false
@@ -24,7 +25,7 @@ struct NoteListView: View {
         Group {
             if isSearching {
                 searchResultsList
-            } else if displayedNotes.isEmpty {
+            } else if displayedRows.isEmpty {
                 ContentUnavailableView(
                     emptyTitle,
                     systemImage: "note.text",
@@ -32,14 +33,20 @@ struct NoteListView: View {
                 )
             } else {
                 List(selection: $selectedNoteID) {
-                    ForEach(displayedNotes) { note in
-                        NoteRowView(item: note, store: store)
-                            .tag(note.id)
+                    ForEach(displayedRows) { row in
+                        NoteRowView(row: row)
+                            .equatable()
+                            .id(row.rowIdentity)
+                            .tag(row.id)
                             .contextMenu {
-                                noteContextMenu(for: note)
+                                if let note = store.noteSummary(id: row.id) {
+                                    noteContextMenu(for: note)
+                                }
                             }
                             .onAppear {
-                                loadMoreIfNeeded(after: note)
+                                if let note = store.noteSummary(id: row.id) {
+                                    loadMoreIfNeeded(after: note)
+                                }
                             }
                     }
                     .onDelete(perform: deleteNotes)
@@ -80,7 +87,7 @@ struct NoteListView: View {
         }
         .onAppear { reload(resetLoadedWindow: true) }
         .onChange(of: tagPath) { _, _ in reload(resetLoadedWindow: true) }
-        .onChange(of: store.listRevision) { _, _ in reload(resetLoadedWindow: false) }
+        .onChange(of: listState.revision) { _, _ in reload(resetLoadedWindow: false) }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(query: newValue)
         }
@@ -96,7 +103,7 @@ struct NoteListView: View {
             MergeNotesSheet(
                 store: store,
                 primaryID: primary.id,
-                candidates: displayedNotes.filter { $0.id != primary.id },
+                candidates: displayedRows.compactMap { store.noteSummary(id: $0.id) }.filter { $0.id != primary.id },
                 onMerge: { otherIDs in
                     performMerge(primaryID: primary.id, otherIDs: otherIDs)
                     mergePrimaryNote = nil
@@ -169,7 +176,7 @@ struct NoteListView: View {
     }
 
     private var hasMoreNotes: Bool {
-        displayedNotes.count < totalNoteCount
+        displayedRows.count < totalNoteCount
     }
 
     private func reload(resetLoadedWindow: Bool = false) {
@@ -178,11 +185,12 @@ struct NoteListView: View {
                 loadedNoteCount = VaultStore.listPageSize
             }
             let limit = max(loadedNoteCount, VaultStore.listPageSize)
-            displayedNotes = try store.noteSummariesPage(offset: 0, limit: limit, tagPath: tagPath)
+            let page = try store.noteSummariesPage(offset: 0, limit: limit, tagPath: tagPath)
+            displayedRows = page.map { NoteListRow(item: $0, store: store) }
             totalNoteCount = try store.noteCountFiltered(by: tagPath)
-            loadedNoteCount = displayedNotes.count
-            if let selectedNoteID, !displayedNotes.contains(where: { $0.id == selectedNoteID }) {
-                self.selectedNoteID = displayedNotes.first?.id
+            loadedNoteCount = displayedRows.count
+            if let selectedNoteID, !displayedRows.contains(where: { $0.id == selectedNoteID }) {
+                self.selectedNoteID = displayedRows.first?.id
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -190,18 +198,18 @@ struct NoteListView: View {
     }
 
     private func loadMoreIfNeeded(after note: NoteListItem) {
-        guard note.id == displayedNotes.last?.id, hasMoreNotes, !isLoadingMore else { return }
+        guard note.id == displayedRows.last?.id, hasMoreNotes, !isLoadingMore else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
 
         do {
             let next = try store.noteSummariesPage(
-                offset: displayedNotes.count,
+                offset: displayedRows.count,
                 limit: VaultStore.listPageSize,
                 tagPath: tagPath
             )
-            displayedNotes.append(contentsOf: next)
-            loadedNoteCount = displayedNotes.count
+            displayedRows.append(contentsOf: next.map { NoteListRow(item: $0, store: store) })
+            loadedNoteCount = displayedRows.count
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -245,8 +253,8 @@ struct NoteListView: View {
     }
 
     private func deleteNotes(at offsets: IndexSet) {
-        let legacyNotes = displayedNotes.map {
-            Note(id: $0.id, title: $0.title, content: "", updatedAt: $0.updatedAt, isPinned: $0.isPinned)
+        let legacyNotes = displayedRows.map {
+            Note(id: $0.id, title: $0.displayTitle, content: "", updatedAt: $0.updatedAt, isPinned: $0.isPinned)
         }
         do {
             try store.softDeleteNotes(at: offsets, in: legacyNotes)
@@ -261,7 +269,7 @@ struct NoteListView: View {
             try store.softDeleteNote(id: note.id)
             try store.flushPackageIfNeeded()
             if selectedNoteID == note.id {
-                selectedNoteID = displayedNotes.first(where: { $0.id != note.id })?.id
+                selectedNoteID = displayedRows.first(where: { $0.id != note.id })?.id
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -288,13 +296,16 @@ struct NoteListView: View {
     }
 }
 
-private struct NoteRowView: View {
-    let item: NoteListItem
-    let store: VaultStore
+private struct NoteRowView: View, Equatable {
+    let row: NoteListRow
+
+    static func == (lhs: NoteRowView, rhs: NoteRowView) -> Bool {
+        lhs.row == rhs.row
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            if item.isPinned {
+            if row.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -302,16 +313,16 @@ private struct NoteRowView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.noteDisplayTitle(item))
+                Text(row.displayTitle)
                     .font(.headline)
                     .lineLimit(1)
-                if !store.noteSnippet(item).isEmpty {
-                    Text(store.noteSnippet(item))
+                if !row.snippet.isEmpty {
+                    Text(row.snippet)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text(item.updatedAt, format: .relative(presentation: .named))
+                Text(row.updatedAt, format: .relative(presentation: .named))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -320,13 +331,13 @@ private struct NoteRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             AccessibilityLabels.noteRow(
-                title: store.noteDisplayTitle(item),
-                snippet: store.noteSnippet(item),
-                isPinned: item.isPinned,
-                updatedAt: item.updatedAt
+                title: row.displayTitle,
+                snippet: row.snippet,
+                isPinned: row.isPinned,
+                updatedAt: row.updatedAt
             )
         )
-        .accessibilityAddTraits(item.isPinned ? [.isSelected] : [])
+        .accessibilityAddTraits(row.isPinned ? [.isSelected] : [])
     }
 }
 

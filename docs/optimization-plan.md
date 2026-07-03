@@ -113,11 +113,26 @@ Run: `xcodebuild -only-testing:mdeTests/Phase4OptimizationTests test`
 
 ---
 
+## Phase 5 — SwiftUI & platform UI ✅
+
+1. **Granular observation** — `VaultListState` (list revision, tag tree) and `VaultEditorState` (content epoch, links, save errors) limit view invalidation; list/editor views bind to the narrow state surfaces.
+2. **Equatable list rows** — `NoteListRow` precomputes display strings; `NoteRowView` is `Equatable` with `.id(rowIdentity)` keyed on `updatedAt`.
+3. **Deferred sync bootstrap** — `ContentView` waits for `isPackageBound` (set after `attachToPackage`) before creating `SyncCoordinator`.
+4. **iOS compact layout** — `ZStack` keeps tags, notes, and editor layers mounted; navigating back preserves editor state.
+5. **Lazy detail column** — split layout builds `NoteEditorView` only when a note is selected.
+6. **Dynamic Type cap** — editor font size capped at `.accessibility3` (29 pt) for layout stability.
+
+### Tests (`Phase5OptimizationTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase5OptimizationTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
-| 2026-07-03 | Phase 4: sync scheduling, delta uploads, pull throttle, network/background lifecycle |
+| 2026-07-03 | Phase 5: granular observation, equatable rows, deferred sync, iOS compact ZStack, editor Dynamic Type cap |
 | 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |

@@ -437,9 +437,11 @@ struct DynamicTypeTests {
     // TC-013 — Dynamic Type scaling
     @Test func tc013EditorFontScalesForAccessibility() {
         let medium = EditorTypography.baseFontSize(for: .medium)
+        let accessibility3 = EditorTypography.baseFontSize(for: .accessibility3)
         let accessibility5 = EditorTypography.baseFontSize(for: .accessibility5)
-        #expect(accessibility5 > medium)
-        #expect(EditorTypography.headingSize(level: 1, baseSize: accessibility5) > accessibility5)
+        #expect(accessibility3 > medium)
+        #expect(accessibility5 == accessibility3)
+        #expect(EditorTypography.headingSize(level: 1, baseSize: accessibility3) > accessibility3)
     }
 }
 
@@ -949,5 +951,57 @@ struct Phase4OptimizationTests {
         } else {
             Issue.record("Expected ciphertext to exceed sync record budget in test")
         }
+    }
+}
+
+// MARK: - Phase 5 optimization
+
+struct Phase5OptimizationTests {
+
+    @Test func phase5ObservationStatesAreIndependent() {
+        let store = VaultStore()
+        let listBefore = store.listState.revision
+        let contentBefore = store.editorState.contentEpoch
+
+        store.editorState.bumpContentEpoch()
+
+        #expect(store.listState.revision == listBefore)
+        #expect(store.editorState.contentEpoch == contentBefore + 1)
+    }
+
+    @Test func phase5ListRowIdentityTracksUpdatedAt() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Row", content: "Body")
+        let item = try #require(store.noteSummary(id: note.id))
+        let row = NoteListRow(item: item, store: store)
+        #expect(row.rowIdentity.hasPrefix(note.id))
+        #expect(row.rowIdentity.contains("\(item.updatedAt.timeIntervalSinceReferenceDate)"))
+    }
+
+    @Test func phase5EditorFontCapsAtAccessibility3() {
+        let capped = EditorTypography.baseFontSize(for: .accessibility5)
+        let maxSize = EditorTypography.baseFontSize(for: .accessibility3)
+        #expect(capped == maxSize)
+        #expect(capped == 29)
+    }
+
+    @Test func phase5AttachToPackageSetsBoundFlag() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        #expect(store.isPackageAttached == false)
+        try store.attachToPackage(at: tempDir)
+        #expect(store.isPackageAttached == true)
+    }
+
+    @Test func phase5ListRevisionForwardsListState() throws {
+        let store = VaultStore()
+        let before = store.listRevision
+        _ = try store.createNote(title: "Bump")
+        #expect(store.listRevision == before + 1)
+        #expect(store.listState.revision == store.listRevision)
     }
 }

@@ -6,7 +6,9 @@
 import SwiftUI
 
 struct NoteEditorView: View {
-    @Bindable var store: VaultStore
+    let store: VaultStore
+    @Bindable var editorState: VaultEditorState
+    @Bindable var listState: VaultListState
     let noteID: String?
     @Binding var selectedNoteID: String?
 
@@ -31,7 +33,7 @@ struct NoteEditorView: View {
                         .padding(.bottom, 4)
                         .accessibilityAddTraits(.isHeader)
 
-                    if let autosaveError = store.autosaveErrorMessage {
+                    if let autosaveError = editorState.autosaveErrorMessage {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
@@ -78,20 +80,20 @@ struct NoteEditorView: View {
                         reloadBacklinks(noteID: newID, title: summary.title)
                     }
                 }
-                .onChange(of: store.contentEpoch) { _, _ in
+                .onChange(of: editorState.contentEpoch) { _, _ in
                     syncEditorFromStore(noteID: activeNoteID)
                 }
-                .onChange(of: store.listRevision) { _, _ in
+                .onChange(of: listState.revision) { _, _ in
                     if store.noteSummary(id: activeNoteID) == nil {
                         selectedNoteID = nil
                     }
                 }
-                .onChange(of: store.linksRevision) { _, _ in
+                .onChange(of: editorState.linksRevision) { _, _ in
                     if let summary = store.noteSummary(id: activeNoteID) {
                         reloadBacklinks(noteID: activeNoteID, title: summary.title)
                     }
                 }
-                .onChange(of: store.autosaveErrorMessage) { _, message in
+                .onChange(of: editorState.autosaveErrorMessage) { _, message in
                     if let message {
                         errorMessage = message
                     }
