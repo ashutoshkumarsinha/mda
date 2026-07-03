@@ -1,0 +1,7 @@
+# Xcode user-specific signing (see mde/Config/Local.xcconfig.example)
+mde/Config/Local.xcconfig
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/

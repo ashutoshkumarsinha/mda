@@ -14,9 +14,22 @@ spec.md  ──  WHAT   (requirements, syntax, tests, milestones)
     └──►  hld.md  ──  HOW   (architecture, schema, pipelines)
 ```
 
+## Code signing
+
+**Debug (local runs):** Uses `mde.debug.entitlements` (sandbox only, no CloudKit) and ad-hoc signing (`Sign to Run Locally`). No Apple Developer team required — open and run in Xcode normally.
+
+**Release / iCloud sync:** Uses `mde.entitlements` with CloudKit. Requires an Apple Developer team:
+
+1. Copy `mde/Config/Local.xcconfig.example` → `mde/Config/Local.xcconfig`
+2. Set `DEVELOPMENT_TEAM` to your [Team ID](https://developer.apple.com/account)
+3. In Xcode: **mde** target → **Signing & Capabilities** → select your team for **Release**
+4. Enable the **iCloud** capability with container `iCloud.name.aks.mde`
+
+CI builds with `CODE_SIGNING_ALLOWED=NO` and do not need a team.
+
 ## Project status
 
-**Phase 1 complete** — three-column UI with markdown editor, tags, and FTS search. Next: Phase 2 per [spec §13](./spec.md#13-delivery-phases).
+**v1 complete** — all delivery phases (0–4) implemented. See [spec §13](./spec.md#13-delivery-phases).
 
 ## Quick reference
 
