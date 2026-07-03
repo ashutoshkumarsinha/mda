@@ -128,11 +128,42 @@ Run: `xcodebuild -only-testing:mdeTests/Phase5OptimizationTests test`
 
 ---
 
+## Phase 6 — Observability & budgets ✅
+
+### 6.1 Benchmark suite (`Phase6ObservabilityTests`)
+
+| Test | Budget |
+|------|--------|
+| Cold launch (simulated store open) | &lt; 2 s (`coldVaultOpenMS`) |
+| Memory after 1k lightweight notes | &lt; 150 MB (`memory1kNotesNFR03MB`) |
+| Keystroke styling p95 (40 samples) | &lt; 16 ms (`incrementalMarkdownStyleMS`) |
+| FTS 10k | &lt; 100 ms (`search10kNotesMS`) |
+| Package persist time + DB size | &lt; 5 s, &lt; 20 MB |
+
+Helpers: `PerformancePercentile`, `VaultStore.measurePersistPackageRegression(at:)`.
+
+### 6.2 DEBUG overlays
+
+- `PerformanceMetricsRecorder` captures signpost interval last/avg/count.
+- **Developer** toolbar sheet (`DeveloperSettingsView`): memory gauge + signpost table.
+- Profile with Instruments — see [instruments-performance.md](./instruments-performance.md).
+
+### 6.3 CI gates
+
+- **macOS:** build + full `mdeTests` (Phase 0–6 baselines).
+- **iOS Simulator:** build + `mdeTests` smoke (first available iPhone simulator).
+
+### Tests (`Phase6ObservabilityTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase6ObservabilityTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
-| 2026-07-03 | Phase 5: granular observation, equatable rows, deferred sync, iOS compact ZStack, editor Dynamic Type cap |
+| 2026-07-03 | Phase 6: p95 style gate, NFR-03 memory ceiling, persist size regression, DEBUG developer overlay, iOS CI smoke |
 | 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |

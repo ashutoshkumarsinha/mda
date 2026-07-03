@@ -143,7 +143,8 @@ struct MarkdownUITextView: UIViewRepresentable {
             styleRange: NSRange? = nil,
             fullDocument: Bool = false
         ) {
-            guard let textView, let storage = textView.textStorage else { return }
+            guard let textView else { return }
+            let storage = textView.textStorage
             if fullDocument, constructs == nil, styleController.cachedConstructs.isEmpty {
                 Task {
                     await styleController.parseAndApply(

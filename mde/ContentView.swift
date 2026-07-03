@@ -19,6 +19,10 @@ struct ContentView: View {
     @State private var showRecoveryAlert = false
     @State private var recoveryError: String?
 
+    #if DEBUG
+    @State private var showDeveloperSettings = false
+    #endif
+
     #if os(macOS)
     @State private var splitVisibility: NavigationSplitViewVisibility = .all
     #endif
@@ -61,6 +65,16 @@ struct ContentView: View {
                     )
                 }
             }
+            #if DEBUG
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    showDeveloperSettings = true
+                } label: {
+                    Label("Developer", systemImage: "gauge.with.dots.needle.67percent")
+                }
+                .help("Performance signposts and memory gauge")
+            }
+            #endif
         }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView(isPresented: $showOnboarding)
@@ -70,6 +84,11 @@ struct ContentView: View {
                 SyncSetupView(coordinator: syncCoordinator, isPresented: $showSyncSetup)
             }
         }
+        #if DEBUG
+        .sheet(isPresented: $showDeveloperSettings) {
+            DeveloperSettingsView()
+        }
+        #endif
         .alert("Database Recovery", isPresented: $showRecoveryAlert) {
             Button("Restore Backup") {
                 restoreDatabase()

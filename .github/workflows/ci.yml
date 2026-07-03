@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  macos-test:
+    name: macOS unit tests
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +19,7 @@ jobs:
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project mde.xcodeproj -scheme mde
 
-      - name: Build and test (TC-000 + Phase 0 baselines)
+      - name: Build (macOS)
         run: |
           xcodebuild \
             -project mde.xcodeproj \
@@ -27,10 +28,64 @@ jobs:
             build \
             CODE_SIGNING_ALLOWED=NO \
             CLANG_ENABLE_CODE_COVERAGE=NO
+
+      - name: Unit tests + performance baselines (Phase 0–6)
+        run: |
           xcodebuild \
             -project mde.xcodeproj \
             -scheme mde \
             -destination 'platform=macOS' \
+            -only-testing:mdeTests \
+            test \
+            CODE_SIGNING_ALLOWED=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO
+
+  ios-smoke:
+    name: iOS simulator smoke
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project mde.xcodeproj -scheme mde
+
+      - name: Resolve iOS Simulator
+        id: ios_sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          for runtime in sorted(devices.keys(), reverse=True):
+              for device in devices[runtime]:
+                  if not device.get('isAvailable'):
+                      continue
+                  name = device.get('name', '')
+                  if name.startswith('iPhone') and 'iPad' not in name:
+                      print(device['udid'])
+                      sys.exit(0)
+          sys.exit(1)
+          ")
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build (iOS Simulator)
+        run: |
+          xcodebuild \
+            -project mde.xcodeproj \
+            -scheme mde \
+            -destination "platform=iOS Simulator,id=${{ steps.ios_sim.outputs.udid }}" \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO
+
+      - name: Unit tests (iOS Simulator)
+        run: |
+          xcodebuild \
+            -project mde.xcodeproj \
+            -scheme mde \
+            -destination "platform=iOS Simulator,id=${{ steps.ios_sim.outputs.udid }}" \
             -only-testing:mdeTests \
             test \
             CODE_SIGNING_ALLOWED=NO \

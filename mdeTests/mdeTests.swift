@@ -1005,3 +1005,87 @@ struct Phase5OptimizationTests {
         #expect(store.listState.revision == store.listRevision)
     }
 }
+
+// MARK: - Phase 6 observability
+
+struct Phase6ObservabilityTests {
+
+    @Test func phase6ColdLaunchSimulatedUnderNFR02() throws {
+        let start = CFAbsoluteTimeGetCurrent()
+        let store = VaultStore()
+        _ = try store.createNote(title: "Launch", content: "Editor ready")
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(store.notes.count == 1)
+        #expect(elapsedMS < PerformanceBudgets.coldVaultOpenMS)
+    }
+
+    @Test(.serialized) func phase6Memory1kNotesUnderNFR03() throws {
+        let store = VaultStore()
+        let metrics = try store.measureLoad1kNotesIntoCache()
+        #expect(store.notes.count == 1_000)
+        #expect(metrics.memoryDeltaMB < PerformanceBudgets.memory1kNotesNFR03MB)
+    }
+
+    @Test func phase6KeystrokeStyleP95UnderNFR01() {
+        let line = "# Heading\nParagraph with **bold** and `code`.\n"
+        let text = String(repeating: line, count: 500)
+        var samples: [Double] = []
+        let sampleCount = PerformanceBudgets.keystrokeStyleSampleCount
+
+        for index in 0..<sampleCount {
+            let caret = text.isEmpty
+                ? 0
+                : min((text.count * index) / max(sampleCount, 1), text.count - 1)
+            let range = MarkdownLineIndex.stylingNeighborhood(in: text, caretLocation: caret)
+            let storage = NSMutableAttributedString(string: text)
+            let constructs = MarkdownConstructScanner.constructs(in: text)
+            let start = CFAbsoluteTimeGetCurrent()
+            MarkdownStyler.apply(
+                to: storage,
+                text: text,
+                caretLocation: caret,
+                constructs: constructs,
+                styleRange: range
+            )
+            samples.append((CFAbsoluteTimeGetCurrent() - start) * 1_000)
+        }
+
+        let p95 = PerformancePercentile.value(samples, percentile: 0.95)
+        #expect(p95 < PerformanceBudgets.incrementalMarkdownStyleMS)
+    }
+
+    @Test(.serialized) func phase6PackagePersistTimeAndSizeRegression() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 1_000, matchIndex: -1, matchContent: "")
+        try store.measureRefreshAll()
+        try store.attachToPackage(at: tempDir)
+
+        let result = try store.measurePersistPackageRegression(at: tempDir)
+        #expect(result.persistMS < PerformanceBudgets.persistPackage1kNotesMS)
+        #expect(result.databaseBytes > 0)
+        #expect(result.databaseBytes < PerformanceBudgets.persistPackage1kNotesMaxBytes)
+    }
+
+    @Test(.serialized) func phase6FTS10kNotesUnderBudget() throws {
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 10_000, matchIndex: 9_999, matchContent: "quartz crystal")
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let results = try store.searchNotes(query: "quartz")
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+
+        #expect(results.count >= 1)
+        #expect(elapsedMS < PerformanceBudgets.search10kNotesMS)
+    }
+
+    @Test func phase6PercentileInterpolation() {
+        let p95 = PerformancePercentile.value([1, 2, 3, 4, 100], percentile: 0.95)
+        #expect(p95 >= 4)
+        #expect(p95 <= 100)
+    }
+}

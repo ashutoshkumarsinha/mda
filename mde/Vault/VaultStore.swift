@@ -726,6 +726,15 @@ final class VaultStore {
         }
     }
 
+    /// Phase 6 — persist timing plus on-disk database size for regression gates.
+    func measurePersistPackageRegression(at packageURL: URL) throws -> (persistMS: Double, databaseBytes: UInt64) {
+        let persistMS = try measurePersistToPackage()
+        let databaseURL = VaultPaths.databaseURL(in: packageURL)
+        let attributes = try FileManager.default.attributesOfItem(atPath: databaseURL.path)
+        let bytes = attributes[.size] as? UInt64 ?? 0
+        return (persistMS, bytes)
+    }
+
     // MARK: - Private
 
     private func noteChanged(_ noteID: String) {
