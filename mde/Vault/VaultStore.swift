@@ -30,6 +30,8 @@ final class VaultStore {
     var notes: [Note] = []
     var tagTree: [TagNode] = []
 
+    var onNoteChanged: ((String) -> Void)?
+
     private var autosaveTask: Task<Void, Never>?
 
     init(meta: VaultMeta = .makeNew()) {
@@ -111,6 +113,7 @@ final class VaultStore {
             note.title = TitleDeriver.derive(from: content, existingTitles: try allTitles())
         }
         try validateUniqueTitle(note.title, excludingNoteID: nil)
+        note.checksum = SyncChecksum.compute(for: note)
 
         try dbQueue.write { db in
             try note.insert(db)
@@ -118,6 +121,7 @@ final class VaultStore {
             try LinkIndexer.reindexLinks(for: note.id, content: note.content, in: db)
         }
         try refreshAll()
+        noteChanged(note.id)
         return note
     }
 
@@ -139,6 +143,7 @@ final class VaultStore {
         let titles = try allTitles(excludingNoteID: id)
         updated.title = TitleDeriver.derive(from: content, existingTitles: titles, excludingNoteID: id)
         try validateUniqueTitle(updated.title, excludingNoteID: id)
+        updated.checksum = SyncChecksum.compute(for: updated)
 
         try dbQueue.write { db in
             try updated.update(db)
@@ -146,6 +151,7 @@ final class VaultStore {
             try LinkIndexer.reindexLinks(for: id, content: content, in: db)
         }
         try refreshAll()
+        noteChanged(id)
         return updated
     }
 
@@ -163,30 +169,54 @@ final class VaultStore {
         }
     }
 
-    func softDeleteNotes(at offsets: IndexSet, in displayedNotes: [Note]) throws {
+    func softDeleteNotes(at offsets: IndexSet, in displayedNotes: [Note], notifySync: Bool = true) throws {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
 
         let ids = offsets.map { displayedNotes[$0].id }
         try dbQueue.write { db in
             for id in ids {
                 try db.execute(
-                    sql: "UPDATE note SET is_deleted = 1, updated_at = ? WHERE id = ?",
-                    arguments: [Date(), id]
+                    sql: """
+                    UPDATE note
+                    SET is_deleted = 1, updated_at = ?, client_updated_at = ?, version = version + 1
+                    WHERE id = ?
+                    """,
+                    arguments: [Date(), Date(), id]
                 )
+                if let note = try Note.filter(Note.Columns.id == id).fetchOne(db) {
+                    var updated = note
+                    updated.checksum = SyncChecksum.compute(for: updated)
+                    try updated.update(db)
+                }
             }
         }
         try refreshAll()
+        if notifySync {
+            ids.forEach { noteChanged($0) }
+        }
     }
 
-    func softDeleteNote(id: String) throws {
+    func softDeleteNote(id: String, notifySync: Bool = true) throws {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE note SET is_deleted = 1, updated_at = ? WHERE id = ?",
-                arguments: [Date(), id]
+                sql: """
+                UPDATE note
+                SET is_deleted = 1, updated_at = ?, client_updated_at = ?, version = version + 1
+                WHERE id = ?
+                """,
+                arguments: [Date(), Date(), id]
             )
+            if let note = try Note.filter(Note.Columns.id == id).fetchOne(db) {
+                var updated = note
+                updated.checksum = SyncChecksum.compute(for: updated)
+                try updated.update(db)
+            }
         }
         try refreshAll()
+        if notifySync {
+            noteChanged(id)
+        }
     }
 
     func notesFiltered(by tagPath: String?) throws -> [Note] {
@@ -283,11 +313,20 @@ final class VaultStore {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE note SET is_pinned = NOT is_pinned, updated_at = ? WHERE id = ?",
-                arguments: [Date(), id]
+                sql: """
+                UPDATE note
+                SET is_pinned = NOT is_pinned, updated_at = ?, client_updated_at = ?, version = version + 1
+                WHERE id = ?
+                """,
+                arguments: [Date(), Date(), id]
             )
+            if var note = try Note.filter(Note.Columns.id == id).fetchOne(db) {
+                note.checksum = SyncChecksum.compute(for: note)
+                try note.update(db)
+            }
         }
         try refreshAll()
+        noteChanged(id)
     }
 
     func mergeNotes(primaryID: String, otherIDs: [String]) throws -> Note {
@@ -320,6 +359,7 @@ final class VaultStore {
         let titles = try allTitles(excludingNoteID: primaryID)
         primary.title = TitleDeriver.derive(from: primary.content, existingTitles: titles, excludingNoteID: primaryID)
         try validateUniqueTitle(primary.title, excludingNoteID: primaryID)
+        primary.checksum = SyncChecksum.compute(for: primary)
 
         try dbQueue.write { db in
             try primary.update(db)
@@ -328,17 +368,150 @@ final class VaultStore {
 
             for other in others {
                 try db.execute(
-                    sql: "UPDATE note SET is_deleted = 1, updated_at = ? WHERE id = ?",
-                    arguments: [Date(), other.id]
+                    sql: """
+                    UPDATE note
+                    SET is_deleted = 1, updated_at = ?, client_updated_at = ?, version = version + 1
+                    WHERE id = ?
+                    """,
+                    arguments: [Date(), Date(), other.id]
                 )
+                if var deleted = try Note.filter(Note.Columns.id == other.id).fetchOne(db) {
+                    deleted.checksum = SyncChecksum.compute(for: deleted)
+                    try deleted.update(db)
+                }
             }
         }
 
         try refreshAll()
+        noteChanged(primaryID)
+        others.forEach { noteChanged($0.id) }
         return primary
     }
 
+    // MARK: - Sync
+
+    func setSyncEnabled(_ enabled: Bool) throws {
+        meta.syncEnabled = enabled
+        try persistToPackageIfNeeded()
+    }
+
+    func updateLastSyncedAt(_ date: Date) throws {
+        meta.lastSyncedAt = date
+        try persistToPackageIfNeeded()
+    }
+
+    func enqueueSync(noteID: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try SyncQueueStore.enqueue(noteID: noteID, vaultID: meta.vaultID, in: db)
+        }
+    }
+
+    func pendingSyncCount() throws -> Int {
+        guard let dbQueue else { return 0 }
+        return try dbQueue.read { db in
+            try SyncQueueStore.pendingCount(vaultID: meta.vaultID, in: db)
+        }
+    }
+
+    func pendingSyncPayloads() throws -> [NoteSyncPayload] {
+        guard let dbQueue else { return [] }
+        return try dbQueue.read { db in
+            let items = try SyncQueueItem
+                .filter(SyncQueueItem.Columns.vaultID == meta.vaultID)
+                .fetchAll(db)
+            var payloads: [NoteSyncPayload] = []
+            for item in items {
+                guard let note = try Note.filter(Note.Columns.id == item.noteID).fetchOne(db) else {
+                    continue
+                }
+                payloads.append(NoteSyncPayload(note: note, vaultID: meta.vaultID))
+            }
+            return payloads
+        }
+    }
+
+    func clearSyncQueue() throws {
+        guard let dbQueue else { return }
+        try dbQueue.write { db in
+            _ = try SyncQueueStore.dequeueAll(vaultID: meta.vaultID, in: db)
+        }
+    }
+
+    func syncPayload(for noteID: String) throws -> NoteSyncPayload? {
+        guard let dbQueue else { return nil }
+        return try dbQueue.read { db in
+            guard let note = try Note.filter(Note.Columns.id == noteID).fetchOne(db) else {
+                return nil
+            }
+            return NoteSyncPayload(note: note, vaultID: meta.vaultID)
+        }
+    }
+
+    func syncBase(for noteID: String) throws -> NoteSyncPayload? {
+        guard let dbQueue else { return nil }
+        return try dbQueue.read { db in
+            try SyncQueueStore.loadBase(noteID: noteID, in: db)
+        }
+    }
+
+    func saveSyncBase(_ payload: NoteSyncPayload) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try SyncQueueStore.saveBase(payload, in: db)
+        }
+    }
+
+    func applySyncPayload(_ payload: NoteSyncPayload, notifySync: Bool = true) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+
+        try dbQueue.write { db in
+            if var existing = try Note.filter(Note.Columns.id == payload.noteID).fetchOne(db) {
+                existing.title = payload.title
+                existing.content = payload.content
+                existing.updatedAt = payload.updatedAt
+                existing.clientUpdatedAt = payload.clientUpdatedAt
+                existing.isPinned = payload.isPinned
+                existing.isDeleted = payload.isDeleted
+                existing.version = payload.version
+                existing.checksum = payload.checksum
+                try existing.update(db)
+                if !payload.isDeleted {
+                    try NoteIndexer.reindexTags(for: existing.id, content: existing.content, in: db)
+                    try LinkIndexer.reindexLinks(for: existing.id, content: existing.content, in: db)
+                }
+            } else if !payload.isDeleted {
+                var note = Note(
+                    id: payload.noteID,
+                    title: payload.title,
+                    content: payload.content,
+                    createdAt: payload.createdAt,
+                    updatedAt: payload.updatedAt,
+                    isPinned: payload.isPinned,
+                    isDeleted: false,
+                    version: payload.version,
+                    clientUpdatedAt: payload.clientUpdatedAt,
+                    checksum: payload.checksum
+                )
+                try note.insert(db)
+                try NoteIndexer.reindexTags(for: note.id, content: note.content, in: db)
+                try LinkIndexer.reindexLinks(for: note.id, content: note.content, in: db)
+            }
+        }
+        try refreshAll()
+        if notifySync {
+            noteChanged(payload.noteID)
+        }
+    }
+
     // MARK: - Private
+
+    private func noteChanged(_ noteID: String) {
+        if meta.syncEnabled {
+            try? enqueueSync(noteID: noteID)
+        }
+        onNoteChanged?(noteID)
+    }
 
     private func refreshAll() throws {
         try reloadNotes()

@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** Phase 2 complete — WikiLinks, backlinks, hybrid token editor, pin/merge/delete, and onboarding. Next: Phase 3 (sync & encryption). See [§13](#13-delivery-phases).
+**Current state:** Phase 3 complete — E2E encrypted CloudKit sync, offline queue, CRDT/LWW merge, and conflict UI. Next: Phase 4 (hardening). See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -444,9 +444,16 @@ stateDiagram-v2
 
 **Exit:** UC-03 · TC-005–TC-008 · all FR-L*, FR-E*, FR-N07
 
-### Phase 3 — Sync & encryption
+### Phase 3 — Sync & encryption *(complete)*
 
-Keychain · AES-GCM · CloudKit · CRDT + conflict UI · offline queue
+- [x] AES-GCM encryption (CryptoKit) for note payloads before upload
+- [x] Per-vault symmetric keys in Keychain (`KeychainSyncKeyStore`)
+- [x] CloudKit private database transport with per-vault record zones
+- [x] Offline `sync_queue` with eventual upload on reconnect
+- [x] CRDT text merge (`TextCRDT`) with LWW fallback (`NoteMerger`)
+- [x] `SyncCoordinator` orchestrates push/pull, debounced sync, conflict detection
+- [x] Toolbar sync status indicator + setup sheet (key recovery warning)
+- [x] Conflict banner: Keep Local / Keep Cloud
 
 **Exit:** UC-05 · TC-009–TC-011 · all FR-Y*
 

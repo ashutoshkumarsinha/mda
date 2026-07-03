@@ -89,6 +89,19 @@ enum DatabaseSchema {
             try db.create(index: "idx_note_link_source", on: "note_link", columns: ["source_id"])
             try db.create(index: "idx_note_link_target", on: "note_link", columns: ["target_id"])
             try db.create(index: "idx_note_link_target_title", on: "note_link", columns: ["target_title"])
+
+            try db.create(table: "sync_queue") { t in
+                t.column("id", .text).primaryKey()
+                t.column("note_id", .text).notNull()
+                t.column("vault_id", .text).notNull()
+                t.column("enqueued_at", .datetime).notNull()
+            }
+            try db.create(index: "idx_sync_queue_vault", on: "sync_queue", columns: ["vault_id"])
+
+            try db.create(table: "note_sync_base") { t in
+                t.column("note_id", .text).primaryKey()
+                t.column("payload_json", .text).notNull()
+            }
         }
 
         return migrator

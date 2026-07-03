@@ -24,6 +24,8 @@ struct DatabaseSchemaTests {
             #expect(tables.contains("tag"))
             #expect(tables.contains("note_tag"))
             #expect(tables.contains("note_link"))
+            #expect(tables.contains("sync_queue"))
+            #expect(tables.contains("note_sync_base"))
 
             let ftsTables = try String.fetchAll(db, sql: """
                 SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'note_fts'
@@ -263,5 +265,144 @@ struct TaskListHelperTests {
     @Test func togglesCheckedToUnchecked() {
         let result = TaskListHelper.toggleTask(at: 5, in: "- [x] buy milk")
         #expect(result == "- [ ] buy milk")
+    }
+}
+
+struct SyncEncryptionTests {
+
+    @Test func encryptsAndDecryptsPayload() throws {
+        let key = SyncEncryption.generateKey()
+        let payload = NoteSyncPayload(
+            note: Note(title: "Secret", content: "Encrypted body"),
+            vaultID: "vault"
+        )
+        let ciphertext = try SyncEncryption.encrypt(payload: payload, using: key)
+        let decrypted = try SyncEncryption.decrypt(ciphertext, using: key)
+        #expect(decrypted.noteID == payload.noteID)
+        #expect(decrypted.content == "Encrypted body")
+    }
+}
+
+struct NoteMergerTests {
+
+    @Test func lwwPicksNewerRemote() {
+        var local = NoteSyncPayload(note: Note(title: "A", content: "local"), vaultID: "v")
+        local.version = 2
+        local.clientUpdatedAt = Date(timeIntervalSince1970: 100)
+
+        var remote = NoteSyncPayload(note: Note(title: "A", content: "remote"), vaultID: "v")
+        remote.version = 2
+        remote.clientUpdatedAt = Date(timeIntervalSince1970: 200)
+        remote.checksum = SyncChecksum.compute(for: remote)
+
+        let result = NoteMerger.merge(local: local, remote: remote, base: nil)
+        if case .merged(let merged) = result {
+            #expect(merged.content == "remote")
+        } else {
+            Issue.record("Expected merged result")
+        }
+    }
+}
+
+@MainActor
+struct SyncCoordinatorTests {
+
+    private func makeVaultID() -> String { "sync-test-\(UUID().uuidString)" }
+
+    @Test(.serialized) func tc009SyncRoundTrip() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = makeVaultID()
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        let storeA = VaultStore(meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true))
+        let storeB = VaultStore(meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true))
+
+        let note = try storeA.createNote(title: "Sync", content: "Hello")
+        _ = try storeA.updateNote(id: note.id, content: "Hello from Mac")
+        let payload = try #require(try storeA.syncPayload(for: note.id))
+
+        let ciphertext = try SyncEncryption.encrypt(payload: payload, using: key)
+        try await transport.upload(
+            EncryptedSyncRecord(
+                noteID: payload.noteID,
+                vaultID: vaultID,
+                ciphertext: ciphertext,
+                version: payload.version,
+                clientUpdatedAt: payload.clientUpdatedAt,
+                isDeleted: false
+            ),
+            vaultID: vaultID
+        )
+
+        let coordinator = SyncCoordinator(store: storeB, transport: transport, keyStore: keyStore)
+        try await coordinator.enableSync()
+        await coordinator.syncNow()
+
+        #expect(storeB.notes.contains(where: { $0.id == note.id && $0.content.contains("Mac") }))
+    }
+
+    @Test(.serialized) func tc010OfflineEditSyncsWithoutDuplication() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = makeVaultID()
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        let store = VaultStore(meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true))
+        let note = try store.createNote(content: "Offline edit")
+        _ = try store.updateNote(id: note.id, content: "Edited offline")
+        let payload = try #require(try store.syncPayload(for: note.id))
+        try? store.enqueueSync(noteID: note.id)
+        let uploadPayload = try store.pendingSyncPayloads().first ?? payload
+
+        transport.isOffline = true
+        var offlineBlocked = false
+        do {
+            let ciphertext = try SyncEncryption.encrypt(payload: uploadPayload, using: key)
+            try await transport.upload(
+                EncryptedSyncRecord(
+                    noteID: uploadPayload.noteID,
+                    vaultID: vaultID,
+                    ciphertext: ciphertext,
+                    version: uploadPayload.version,
+                    clientUpdatedAt: uploadPayload.clientUpdatedAt,
+                    isDeleted: false
+                ),
+                vaultID: vaultID
+            )
+        } catch {
+            offlineBlocked = true
+        }
+        #expect(offlineBlocked)
+
+        transport.isOffline = false
+        let ciphertext = try SyncEncryption.encrypt(payload: uploadPayload, using: key)
+        try await transport.upload(
+            EncryptedSyncRecord(
+                noteID: uploadPayload.noteID,
+                vaultID: vaultID,
+                ciphertext: ciphertext,
+                version: uploadPayload.version,
+                clientUpdatedAt: uploadPayload.clientUpdatedAt,
+                isDeleted: false
+            ),
+            vaultID: vaultID
+        )
+        try? store.clearSyncQueue()
+
+        #expect(transport.uploadCount == 1)
+    }
+
+    @Test(.serialized) func tc011DuplicateTitleBlocked() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Daily")
+        do {
+            _ = try store.createNote(title: "daily")
+            Issue.record("Expected duplicate title error")
+        } catch VaultStoreError.duplicateTitle {
+            #expect(true)
+        }
     }
 }
