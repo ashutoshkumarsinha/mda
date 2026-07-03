@@ -10,7 +10,7 @@
 		024BE42F2FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481312FED070900B678AB /* GRDB */; };
 		024BE4302FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481332FED070900B678AB /* GRDB */; };
 		024BE5112FF7406D00DE451E /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 027481352FED070900B678AB /* Markdown */; };
-		024BE5122FF7406D00DE451E /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 027481362FED070900B678AB /* Markdown */; };
+		024BE5122FF7406D00DE451E /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,7 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				024BE5122FF7406D00DE451E /* Markdown in Frameworks */,
+				024BE5122FF7406D00DE451E /* (null) in Frameworks */,
 				024BE4302FF72AE600DE451E /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

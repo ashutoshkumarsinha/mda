@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var selectedTagPath: String?
     @State private var selectedNoteID: String?
     @State private var searchQuery = ""
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: OnboardingKeys.hasSeenOnboarding)
 
     var body: some View {
         NavigationSplitView {
@@ -25,9 +26,16 @@ struct ContentView: View {
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } detail: {
-            NoteEditorView(store: store, noteID: selectedNoteID)
+            NoteEditorView(
+                store: store,
+                noteID: selectedNoteID,
+                selectedNoteID: $selectedNoteID
+            )
         }
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView(isPresented: $showOnboarding)
+        }
     }
 }
 

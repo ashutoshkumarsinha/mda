@@ -14,6 +14,7 @@ struct NoteListView: View {
     @State private var displayedNotes: [Note] = []
     @State private var searchResults: [SearchResult] = []
     @State private var errorMessage: String?
+    @State private var mergePrimaryNote: Note?
 
     var body: some View {
         Group {
@@ -30,6 +31,9 @@ struct NoteListView: View {
                     ForEach(displayedNotes) { note in
                         NoteRowView(note: note, store: store)
                             .tag(note.id)
+                            .contextMenu {
+                                noteContextMenu(for: note)
+                            }
                     }
                     .onDelete(perform: deleteNotes)
                 }
@@ -58,6 +62,20 @@ struct NoteListView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .sheet(item: $mergePrimaryNote) { primary in
+            MergeNotesSheet(
+                store: store,
+                primaryID: primary.id,
+                candidates: displayedNotes.filter { $0.id != primary.id },
+                onMerge: { otherIDs in
+                    performMerge(primaryID: primary.id, otherIDs: otherIDs)
+                    mergePrimaryNote = nil
+                },
+                onCancel: {
+                    mergePrimaryNote = nil
+                }
+            )
         }
     }
 
@@ -95,6 +113,23 @@ struct NoteListView: View {
                     .tag(result.id)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func noteContextMenu(for note: Note) -> some View {
+        Button(note.isPinned ? "Unpin" : "Pin") {
+            togglePin(note)
+        }
+
+        Button("Merge…") {
+            mergePrimaryNote = note
+        }
+
+        Divider()
+
+        Button("Delete", role: .destructive) {
+            deleteNote(note)
         }
     }
 
@@ -140,6 +175,40 @@ struct NoteListView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func deleteNote(_ note: Note) {
+        do {
+            try store.softDeleteNote(id: note.id)
+            try store.persistToPackageIfNeeded()
+            if selectedNoteID == note.id {
+                selectedNoteID = displayedNotes.first(where: { $0.id != note.id })?.id
+            }
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func togglePin(_ note: Note) {
+        do {
+            try store.togglePin(id: note.id)
+            try store.persistToPackageIfNeeded()
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func performMerge(primaryID: String, otherIDs: [String]) {
+        do {
+            let merged = try store.mergeNotes(primaryID: primaryID, otherIDs: otherIDs)
+            try store.persistToPackageIfNeeded()
+            selectedNoteID = merged.id
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 private struct NoteRowView: View {
@@ -147,20 +216,82 @@ private struct NoteRowView: View {
     let store: VaultStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(store.noteDisplayTitle(note))
-                .font(.headline)
-                .lineLimit(1)
-            if !store.noteSnippet(note).isEmpty {
-                Text(store.noteSnippet(note))
-                    .font(.caption)
+        HStack(alignment: .top, spacing: 6) {
+            if note.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .padding(.top, 3)
             }
-            Text(note.updatedAt, format: .relative(presentation: .named))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.noteDisplayTitle(note))
+                    .font(.headline)
+                    .lineLimit(1)
+                if !store.noteSnippet(note).isEmpty {
+                    Text(store.noteSnippet(note))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Text(note.updatedAt, format: .relative(presentation: .named))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct MergeNotesSheet: View {
+    let store: VaultStore
+    let primaryID: String
+    let candidates: [Note]
+    let onMerge: ([String]) -> Void
+    let onCancel: () -> Void
+
+    @State private var selectedIDs = Set<String>()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Merge into Primary Note")
+                .font(.headline)
+
+            if let primary = store.notes.first(where: { $0.id == primaryID }) {
+                Text("Primary: \(store.noteDisplayTitle(primary))")
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Select notes to merge:")
+                .font(.subheadline)
+
+            ForEach(candidates) { note in
+                Toggle(isOn: Binding(
+                    get: { selectedIDs.contains(note.id) },
+                    set: { isOn in
+                        if isOn {
+                            selectedIDs.insert(note.id)
+                        } else {
+                            selectedIDs.remove(note.id)
+                        }
+                    }
+                )) {
+                    Text(store.noteDisplayTitle(note))
+                }
+            }
+            .frame(minHeight: 160)
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                Button("Merge") {
+                    onMerge(Array(selectedIDs))
+                }
+                .disabled(selectedIDs.isEmpty)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 360, height: 360)
     }
 }

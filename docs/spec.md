@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** Phase 1 complete — three-column macOS UI with GRDB vault, markdown editor, tags, and FTS search. Next: Phase 2 (WikiLinks, backlinks, hybrid tokens). See [§13](#13-delivery-phases).
+**Current state:** Phase 2 complete — WikiLinks, backlinks, hybrid token editor, pin/merge/delete, and onboarding. Next: Phase 3 (sync & encryption). See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -431,9 +431,16 @@ stateDiagram-v2
 
 **Exit:** UC-01, UC-02, UC-04, UC-06 · TC-001–TC-004
 
-### Phase 2 — Graph & polish
+### Phase 2 — Graph & polish *(complete)*
 
-WikiLinks · backlinks · hybrid token hide · pin/merge/delete · note cards · onboarding
+- [x] WikiLink extraction, `note_link` indexing, and target resolution
+- [x] Backlinks panel in editor; tap link to navigate or create target
+- [x] Hybrid token hide/show (caret-aware α=0.15) for headings, bold, tags, tasks, wikilinks
+- [x] Task checkbox toggle on click
+- [x] Pin notes (context menu); pinned sort first
+- [x] Merge notes with `## Merged from {title}` section
+- [x] Note context menu: Pin, Merge, Delete
+- [x] Skippable 3-step onboarding on first vault open
 
 **Exit:** UC-03 · TC-005–TC-008 · all FR-L*, FR-E*, FR-N07
 

@@ -8,13 +8,17 @@ import Markdown
 
 enum MarkdownStyler {
     private static let baseFontSize: CGFloat = 15
+    private static let tokenHiddenAlpha: CGFloat = 0.15
+    private static let accent = NSColor.controlAccentColor
 
-    static func apply(to textStorage: NSTextStorage, text: String) {
+    static func apply(to textStorage: NSTextStorage, text: String, caretLocation: Int) {
         let length = (text as NSString).length
         guard length > 0 else { return }
 
         let baseFont = NSFont.systemFont(ofSize: baseFontSize)
         let baseRange = NSRange(location: 0, length: length)
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let active = MarkdownConstructScanner.constructContaining(location: caretLocation, in: constructs)
 
         textStorage.beginEditing()
         textStorage.setAttributes([
@@ -24,11 +28,49 @@ enum MarkdownStyler {
 
         styleLines(in: text, storage: textStorage)
         styleInline(in: text, storage: textStorage)
+        applyHybridTokens(constructs: constructs, active: active, storage: textStorage, text: text, caretLocation: caretLocation)
 
-        // swift-markdown parse validates structure; line/inline rules handle rendering for Phase 1.
         _ = Document(parsing: text)
 
         textStorage.endEditing()
+    }
+
+    private static func applyHybridTokens(
+        constructs: [MarkdownConstruct],
+        active: MarkdownConstruct?,
+        storage: NSTextStorage,
+        text: String,
+        caretLocation: Int
+    ) {
+        for construct in constructs {
+            let isActive = active?.fullRange == construct.fullRange
+
+            for tokenRange in construct.tokenRanges {
+                let alpha: CGFloat = isActive ? 1.0 : tokenHiddenAlpha
+                storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(alpha), range: tokenRange)
+            }
+
+            switch construct.kind {
+            case .wikilink:
+                if let contentRange = construct.contentRange, !isActive {
+                    storage.addAttributes([
+                        .foregroundColor: accent,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    ], range: contentRange)
+                }
+            case .tag:
+                if let contentRange = construct.contentRange {
+                    let alpha: CGFloat = isActive ? 1.0 : 0.85
+                    storage.addAttribute(.foregroundColor, value: accent.withAlphaComponent(alpha), range: contentRange)
+                }
+            case .task:
+                if let tokenRange = construct.tokenRanges.first {
+                    storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(isActive ? 1.0 : tokenHiddenAlpha), range: tokenRange)
+                }
+            default:
+                break
+            }
+        }
     }
 
     private static func styleLines(in text: String, storage: NSTextStorage) {

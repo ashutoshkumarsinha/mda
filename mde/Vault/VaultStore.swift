@@ -115,6 +115,7 @@ final class VaultStore {
         try dbQueue.write { db in
             try note.insert(db)
             try NoteIndexer.reindexTags(for: note.id, content: note.content, in: db)
+            try LinkIndexer.reindexLinks(for: note.id, content: note.content, in: db)
         }
         try refreshAll()
         return note
@@ -142,6 +143,7 @@ final class VaultStore {
         try dbQueue.write { db in
             try updated.update(db)
             try NoteIndexer.reindexTags(for: id, content: content, in: db)
+            try LinkIndexer.reindexLinks(for: id, content: content, in: db)
         }
         try refreshAll()
         return updated
@@ -257,11 +259,98 @@ final class VaultStore {
         return String(text.prefix(maxLength)) + "..."
     }
 
+    func noteID(forTitle title: String) -> String? {
+        let lowered = title.lowercased()
+        return notes.first { $0.title.lowercased() == lowered }?.id
+    }
+
+    func resolvedWikiLinkTitles(in content: String) -> Set<String> {
+        let existing = Set(notes.map { $0.title.lowercased() })
+        return Set(
+            WikiLinkExtractor.extractTitles(from: content)
+                .filter { existing.contains($0.lowercased()) }
+        )
+    }
+
+    func fetchBacklinks(for noteID: String, title: String) throws -> [Note] {
+        guard let dbQueue else { return [] }
+        return try dbQueue.read { db in
+            try LinkIndexer.fetchBacklinks(for: noteID, title: title, in: db)
+        }
+    }
+
+    func togglePin(id: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE note SET is_pinned = NOT is_pinned, updated_at = ? WHERE id = ?",
+                arguments: [Date(), id]
+            )
+        }
+        try refreshAll()
+    }
+
+    func mergeNotes(primaryID: String, otherIDs: [String]) throws -> Note {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        let uniqueOthers = otherIDs.filter { $0 != primaryID }
+
+        var primary = try dbQueue.read { db in
+            guard let note = try Note.filter(Note.Columns.id == primaryID).fetchOne(db) else {
+                throw VaultError.databaseUnavailable
+            }
+            return note
+        }
+
+        let others = try dbQueue.read { db in
+            try Note
+                .filter(Note.Columns.isDeleted == false)
+                .fetchAll(db)
+                .filter { uniqueOthers.contains($0.id) }
+        }
+
+        for other in others {
+            let section = "\n\n## Merged from \(other.title)\n\n\(other.content)"
+            primary.content += section
+        }
+
+        primary.updatedAt = Date()
+        primary.clientUpdatedAt = Date()
+        primary.version += 1
+
+        let titles = try allTitles(excludingNoteID: primaryID)
+        primary.title = TitleDeriver.derive(from: primary.content, existingTitles: titles, excludingNoteID: primaryID)
+        try validateUniqueTitle(primary.title, excludingNoteID: primaryID)
+
+        try dbQueue.write { db in
+            try primary.update(db)
+            try NoteIndexer.reindexTags(for: primaryID, content: primary.content, in: db)
+            try LinkIndexer.reindexLinks(for: primaryID, content: primary.content, in: db)
+
+            for other in others {
+                try db.execute(
+                    sql: "UPDATE note SET is_deleted = 1, updated_at = ? WHERE id = ?",
+                    arguments: [Date(), other.id]
+                )
+            }
+        }
+
+        try refreshAll()
+        return primary
+    }
+
     // MARK: - Private
 
     private func refreshAll() throws {
         try reloadNotes()
         try reloadTagTree()
+        try resolvePendingLinks()
+    }
+
+    private func resolvePendingLinks() throws {
+        guard let dbQueue else { return }
+        try dbQueue.write { db in
+            try LinkIndexer.resolvePendingLinks(in: db)
+        }
     }
 
     private func reloadNotes() throws {

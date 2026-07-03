@@ -188,4 +188,80 @@ struct VaultStoreTests {
         let updated = try store.updateNote(id: note.id, content: "# Title\nBody")
         #expect(updated.title == "Title")
     }
+
+    // TC-005 — WikiLink create
+    @Test func tc005WikiLinkCreatesAndResolves() throws {
+        let store = VaultStore()
+        let source = try store.createNote(content: "See [[New Page]]")
+        let target = try store.createNote(title: "New Page")
+
+        #expect(store.noteID(forTitle: "New Page") == target.id)
+
+        let backlinks = try store.fetchBacklinks(for: target.id, title: target.title)
+        #expect(backlinks.contains(where: { $0.id == source.id }))
+    }
+
+    // TC-006 — Backlinks
+    @Test func tc006BacklinksListLinkingNotes() throws {
+        let store = VaultStore()
+        let target = try store.createNote(title: "Target")
+        let noteA = try store.createNote(title: "A", content: "Link [[Target]]")
+        let noteB = try store.createNote(title: "B", content: "Also [[Target]]")
+
+        let backlinks = try store.fetchBacklinks(for: target.id, title: target.title)
+        #expect(backlinks.count == 2)
+        #expect(backlinks.contains(where: { $0.id == noteA.id }))
+        #expect(backlinks.contains(where: { $0.id == noteB.id }))
+    }
+
+    // TC-007 — Merge notes
+    @Test func tc007MergeNotesIntoPrimary() throws {
+        let store = VaultStore()
+        let alpha = try store.createNote(title: "Alpha", content: "Alpha body")
+        let beta = try store.createNote(title: "Beta", content: "Beta body")
+
+        let merged = try store.mergeNotes(primaryID: alpha.id, otherIDs: [beta.id])
+
+        #expect(merged.content.contains("## Merged from Beta"))
+        #expect(merged.content.contains("Beta body"))
+        #expect(store.notes.contains(where: { $0.id == alpha.id }))
+        #expect(!store.notes.contains(where: { $0.id == beta.id }))
+    }
+
+    // TC-008 — Checkbox toggle
+    @Test func tc008CheckboxTogglePersists() throws {
+        let store = VaultStore()
+        let note = try store.createNote(content: "- [ ] task")
+        let toggled = TaskListHelper.toggleTask(at: 3, in: note.content)
+        #expect(toggled?.contains("- [x] task") == true)
+
+        let updated = try store.updateNote(id: note.id, content: toggled ?? "")
+        #expect(updated.content.contains("- [x] task"))
+
+        let reloaded = VaultStore()
+        let snapshot = try store.makeSnapshot()
+        try reloaded.load(from: snapshot.makeFileWrapper())
+        #expect(reloaded.notes.first?.content.contains("- [x] task") == true)
+    }
+}
+
+struct WikiLinkExtractorTests {
+
+    @Test func extractsTitles() {
+        let titles = WikiLinkExtractor.extractTitles(from: "See [[One]] and [[Two]]")
+        #expect(titles == ["One", "Two"])
+    }
+}
+
+struct TaskListHelperTests {
+
+    @Test func togglesUncheckedToChecked() {
+        let result = TaskListHelper.toggleTask(at: 5, in: "- [ ] buy milk")
+        #expect(result == "- [x] buy milk")
+    }
+
+    @Test func togglesCheckedToUnchecked() {
+        let result = TaskListHelper.toggleTask(at: 5, in: "- [x] buy milk")
+        #expect(result == "- [ ] buy milk")
+    }
 }
