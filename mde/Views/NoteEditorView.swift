@@ -10,6 +10,9 @@ struct NoteEditorView: View {
     let noteID: String?
     @Binding var selectedNoteID: String?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var editorText = ""
     @State private var loadedNoteID: String?
     @State private var backlinks: [Note] = []
@@ -26,6 +29,7 @@ struct NoteEditorView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 4)
+                        .accessibilityAddTraits(.isHeader)
 
                     if !backlinks.isEmpty {
                         backlinksPanel
@@ -34,6 +38,9 @@ struct NoteEditorView: View {
                     MarkdownTextView(
                         text: $editorText,
                         resolvedLinkTitles: store.resolvedWikiLinkTitles(in: editorText),
+                        baseFontSize: EditorTypography.baseFontSize(for: dynamicTypeSize),
+                        reduceMotion: reduceMotion,
+                        noteTitle: store.noteDisplayTitle(note),
                         onTextChange: { updated in
                             store.scheduleAutosave(noteID: noteID, content: updated)
                         },
@@ -42,6 +49,8 @@ struct NoteEditorView: View {
                         }
                     )
                 }
+                .accessibilityLabel(AccessibilityLabels.noteEditor)
+                .focusSection()
                 .onAppear {
                     load(note: note)
                     reloadBacklinks(for: note)
@@ -68,6 +77,7 @@ struct NoteEditorView: View {
                     systemImage: "square.and.pencil",
                     description: Text("Choose a note from the list or create a new one.")
                 )
+                .accessibilityLabel(AccessibilityLabels.emptyNoteSelection)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -100,6 +110,7 @@ struct NoteEditorView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
+                .accessibilityAddTraits(.isHeader)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -109,12 +120,14 @@ struct NoteEditorView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(AccessibilityLabels.backlink(title: store.noteDisplayTitle(backlink)))
                     }
                 }
                 .padding(.horizontal, 16)
             }
             .padding(.bottom, 8)
         }
+        .accessibilityElement(children: .contain)
     }
 
     private func load(note: Note) {

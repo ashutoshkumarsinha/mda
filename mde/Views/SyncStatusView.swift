@@ -24,12 +24,15 @@ struct SyncStatusToolbarContent: View {
                     Task { await coordinator.syncNow() }
                 }
                 .disabled(coordinator.status == .syncing)
+                .accessibilityLabel("Sync now")
             } else {
                 Button("Enable iCloud Sync") {
                     showSetup = true
                 }
+                .accessibilityLabel("Enable iCloud sync")
             }
         }
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -38,17 +41,22 @@ struct SyncStatusToolbarContent: View {
         case .disabled:
             Label("Sync off", systemImage: "icloud.slash")
                 .foregroundStyle(.secondary)
+                .accessibilityLabel(AccessibilityLabels.syncStatus("off", pendingCount: coordinator.pendingUploadCount))
         case .idle:
             Label("Synced", systemImage: "icloud")
                 .foregroundStyle(.secondary)
+                .accessibilityLabel(AccessibilityLabels.syncStatus("synced", pendingCount: coordinator.pendingUploadCount))
         case .syncing:
             Label("Syncing…", systemImage: "arrow.triangle.2.circlepath.icloud")
+                .accessibilityLabel(AccessibilityLabels.syncStatus("syncing", pendingCount: coordinator.pendingUploadCount))
         case .offline:
             Label("Offline", systemImage: "icloud.slash")
                 .foregroundStyle(.orange)
+                .accessibilityLabel(AccessibilityLabels.syncStatus("offline", pendingCount: coordinator.pendingUploadCount))
         case .error:
             Label("Sync issue", systemImage: "exclamationmark.icloud")
                 .foregroundStyle(.orange)
+                .accessibilityLabel(AccessibilityLabels.syncStatus("error", pendingCount: coordinator.pendingUploadCount))
         }
     }
 }
@@ -70,6 +78,8 @@ struct SyncConflictBanner: View {
         }
         .padding(12)
         .background(.orange.opacity(0.12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Sync conflict. This note changed on another device.")
     }
 }
 

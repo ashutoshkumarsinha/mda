@@ -72,7 +72,7 @@ final class VaultStore {
             dbQueue = try DatabaseQueue(path: databaseURL.path)
         }
 
-        try DatabaseSchema.migrate(dbQueue!)
+        try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
         packageURL = url
         try refreshAll()
     }
@@ -501,6 +501,22 @@ final class VaultStore {
         try refreshAll()
         if notifySync {
             noteChanged(payload.noteID)
+        }
+    }
+
+    // MARK: - Performance / testing
+
+    /// Inserts many notes directly for performance benchmarking without reloading in-memory caches.
+    func seedPerformanceNotes(count: Int, matchIndex: Int, matchContent: String) throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        try dbQueue.write { db in
+            for index in 0..<count {
+                var note = Note(
+                    title: "Note \(index)",
+                    content: index == matchIndex ? matchContent : "Lorem ipsum \(index)"
+                )
+                try note.insert(db)
+            }
         }
     }
 

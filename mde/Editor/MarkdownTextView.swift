@@ -9,6 +9,9 @@ import SwiftUI
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var resolvedLinkTitles: Set<String>
+    var baseFontSize: CGFloat
+    var reduceMotion: Bool
+    var noteTitle: String
     var onTextChange: (String) -> Void
     var onWikiLinkClick: (String) -> Void
 
@@ -24,12 +27,18 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
-        textView.font = .systemFont(ofSize: 15)
+        textView.font = .systemFont(ofSize: baseFontSize)
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.string = text
         textView.backgroundColor = .textBackgroundColor
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+
+        configureAccessibility(on: textView)
 
         context.coordinator.textView = textView
+        context.coordinator.styleOptions = styleOptions
         context.coordinator.installClickGesture(on: textView)
         context.coordinator.applyStyles()
 
@@ -39,6 +48,9 @@ struct MarkdownTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
+        context.coordinator.styleOptions = styleOptions
+        textView.font = .systemFont(ofSize: baseFontSize)
+        configureAccessibility(on: textView)
         if textView.string != text {
             let selected = textView.selectedRanges
             textView.string = text
@@ -51,14 +63,26 @@ struct MarkdownTextView: NSViewRepresentable {
         Coordinator(
             text: $text,
             resolvedLinkTitles: resolvedLinkTitles,
+            styleOptions: styleOptions,
             onTextChange: onTextChange,
             onWikiLinkClick: onWikiLinkClick
         )
     }
 
+    private var styleOptions: MarkdownStyleOptions {
+        MarkdownStyleOptions(baseFontSize: baseFontSize, reduceMotion: reduceMotion)
+    }
+
+    private func configureAccessibility(on textView: NSTextView) {
+        textView.setAccessibilityLabel(AccessibilityLabels.editorPlaceholder(noteTitle: noteTitle))
+        textView.setAccessibilityRole(.textArea)
+        textView.setAccessibilityHelp("Markdown note editor")
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var resolvedLinkTitles: Set<String>
+        var styleOptions = MarkdownStyleOptions()
         var onTextChange: (String) -> Void
         var onWikiLinkClick: (String) -> Void
         weak var textView: NSTextView?
@@ -68,11 +92,13 @@ struct MarkdownTextView: NSViewRepresentable {
         init(
             text: Binding<String>,
             resolvedLinkTitles: Set<String>,
+            styleOptions: MarkdownStyleOptions,
             onTextChange: @escaping (String) -> Void,
             onWikiLinkClick: @escaping (String) -> Void
         ) {
             _text = text
             self.resolvedLinkTitles = resolvedLinkTitles
+            self.styleOptions = styleOptions
             self.onTextChange = onTextChange
             self.onWikiLinkClick = onWikiLinkClick
         }
@@ -103,12 +129,14 @@ struct MarkdownTextView: NSViewRepresentable {
             let index = textView.characterIndexForInsertion(at: point)
 
             if let toggled = TaskListHelper.toggleTask(at: index, in: textView.string) {
+                let checked = toggled.contains("- [x]") || toggled.contains("- [X]")
                 isApplyingStyles = true
                 textView.string = toggled
                 text = toggled
                 onTextChange(toggled)
                 isApplyingStyles = false
                 applyStyles()
+                announceTaskToggle(checked: checked, on: textView)
                 return
             }
 
@@ -124,12 +152,21 @@ struct MarkdownTextView: NSViewRepresentable {
             guard let textView, let storage = textView.textStorage else { return }
             isApplyingStyles = true
             let caret = textView.selectedRange().location
-            MarkdownStyler.apply(to: storage, text: textView.string, caretLocation: caret)
+            MarkdownStyler.apply(
+                to: storage,
+                text: textView.string,
+                caretLocation: caret,
+                options: styleOptions
+            )
             isApplyingStyles = false
         }
 
         private func scheduleStyleApply() {
             styleTask?.cancel()
+            if styleOptions.reduceMotion {
+                applyStyles()
+                return
+            }
             styleTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
@@ -140,6 +177,16 @@ struct MarkdownTextView: NSViewRepresentable {
         func installClickGesture(on textView: NSTextView) {
             let gesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
             textView.addGestureRecognizer(gesture)
+        }
+
+        private func announceTaskToggle(checked: Bool, on textView: NSTextView) {
+            let message = AccessibilityLabels.taskCheckbox(checked: checked)
+            textView.setAccessibilityValue(message)
+            NSAccessibility.post(
+                element: textView,
+                notification: .announcementRequested,
+                userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high]
+            )
         }
     }
 }

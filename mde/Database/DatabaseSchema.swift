@@ -107,7 +107,21 @@ enum DatabaseSchema {
         return migrator
     }
 
-    static func migrate(_ dbQueue: DatabaseQueue) throws {
+    static func migrate(_ dbQueue: DatabaseQueue, databaseURL: URL? = nil) throws {
+        if let databaseURL {
+            try backupDatabaseIfNeeded(at: databaseURL)
+        }
         try migrator.migrate(dbQueue)
+    }
+
+    private static func backupDatabaseIfNeeded(at databaseURL: URL) throws {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: databaseURL.path) else { return }
+
+        let backupURL = databaseURL.deletingLastPathComponent().appendingPathComponent("notes.backup.db")
+        if fileManager.fileExists(atPath: backupURL.path) {
+            try fileManager.removeItem(at: backupURL)
+        }
+        try fileManager.copyItem(at: databaseURL, to: backupURL)
     }
 }

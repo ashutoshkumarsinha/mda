@@ -6,16 +6,26 @@
 import AppKit
 import Markdown
 
-enum MarkdownStyler {
-    private static let baseFontSize: CGFloat = 15
-    private static let tokenHiddenAlpha: CGFloat = 0.15
-    private static let accent = NSColor.controlAccentColor
+struct MarkdownStyleOptions {
+    var baseFontSize: CGFloat = 15
+    var reduceMotion: Bool = false
 
-    static func apply(to textStorage: NSTextStorage, text: String, caretLocation: Int) {
+    var tokenHiddenAlpha: CGFloat { reduceMotion ? 1.0 : 0.15 }
+}
+
+enum MarkdownStyler {
+    private static let accent = NSColor.linkColor
+
+    static func apply(
+        to textStorage: NSTextStorage,
+        text: String,
+        caretLocation: Int,
+        options: MarkdownStyleOptions = MarkdownStyleOptions()
+    ) {
         let length = (text as NSString).length
         guard length > 0 else { return }
 
-        let baseFont = NSFont.systemFont(ofSize: baseFontSize)
+        let baseFont = NSFont.systemFont(ofSize: options.baseFontSize)
         let baseRange = NSRange(location: 0, length: length)
         let constructs = MarkdownConstructScanner.constructs(in: text)
         let active = MarkdownConstructScanner.constructContaining(location: caretLocation, in: constructs)
@@ -26,9 +36,14 @@ enum MarkdownStyler {
             .foregroundColor: NSColor.labelColor,
         ], range: baseRange)
 
-        styleLines(in: text, storage: textStorage)
-        styleInline(in: text, storage: textStorage)
-        applyHybridTokens(constructs: constructs, active: active, storage: textStorage, text: text, caretLocation: caretLocation)
+        styleLines(in: text, storage: textStorage, options: options)
+        styleInline(in: text, storage: textStorage, options: options)
+        applyHybridTokens(
+            constructs: constructs,
+            active: active,
+            storage: textStorage,
+            options: options
+        )
 
         _ = Document(parsing: text)
 
@@ -39,9 +54,10 @@ enum MarkdownStyler {
         constructs: [MarkdownConstruct],
         active: MarkdownConstruct?,
         storage: NSTextStorage,
-        text: String,
-        caretLocation: Int
+        options: MarkdownStyleOptions
     ) {
+        let tokenHiddenAlpha = options.tokenHiddenAlpha
+
         for construct in constructs {
             let isActive = active?.fullRange == construct.fullRange
 
@@ -65,7 +81,11 @@ enum MarkdownStyler {
                 }
             case .task:
                 if let tokenRange = construct.tokenRanges.first {
-                    storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(isActive ? 1.0 : tokenHiddenAlpha), range: tokenRange)
+                    storage.addAttribute(
+                        .foregroundColor,
+                        value: NSColor.labelColor.withAlphaComponent(isActive ? 1.0 : tokenHiddenAlpha),
+                        range: tokenRange
+                    )
                 }
             default:
                 break
@@ -73,7 +93,7 @@ enum MarkdownStyler {
         }
     }
 
-    private static func styleLines(in text: String, storage: NSTextStorage) {
+    private static func styleLines(in text: String, storage: NSTextStorage, options: MarkdownStyleOptions) {
         let nsText = text as NSString
         var location = 0
         for line in text.components(separatedBy: "\n") {
@@ -82,12 +102,7 @@ enum MarkdownStyler {
 
             if trimmed.hasPrefix("#") {
                 let level = trimmed.prefix(while: { $0 == "#" }).count
-                let size: CGFloat = switch min(level, 6) {
-                case 1: 28
-                case 2: 22
-                case 3: 18
-                default: baseFontSize
-                }
+                let size = EditorTypography.headingSize(level: level, baseSize: options.baseFontSize)
                 storage.addAttributes([
                     .font: NSFont.boldSystemFont(ofSize: size),
                 ], range: range)
@@ -102,7 +117,8 @@ enum MarkdownStyler {
         }
     }
 
-    private static func styleInline(in text: String, storage: NSTextStorage) {
+    private static func styleInline(in text: String, storage: NSTextStorage, options: MarkdownStyleOptions) {
+        let baseFontSize = options.baseFontSize
         applyPattern(#"\*\*([^*]+)\*\*"#, in: text, storage: storage) { range in
             storage.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: baseFontSize), range: range)
         }

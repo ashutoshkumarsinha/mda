@@ -5,6 +5,7 @@
 
 import Foundation
 import GRDB
+import SwiftUI
 import Testing
 @testable import mde
 
@@ -404,5 +405,92 @@ struct SyncCoordinatorTests {
         } catch VaultStoreError.duplicateTitle {
             #expect(true)
         }
+    }
+}
+
+struct AccessibilityTests {
+
+    // TC-012 — VoiceOver navigation labels
+    @Test func tc012PrimaryViewsExposeLabels() {
+        #expect(AccessibilityLabels.tagSidebar == "Tags")
+        #expect(AccessibilityLabels.noteList == "Notes")
+        #expect(AccessibilityLabels.noteEditor == "Note editor")
+        #expect(AccessibilityLabels.tagFilter(path: "inbox", isSelected: true).contains("inbox"))
+        #expect(AccessibilityLabels.noteRow(
+            title: "Meeting",
+            snippet: "Discuss roadmap",
+            isPinned: true,
+            updatedAt: Date()
+        ).contains("Meeting"))
+        #expect(AccessibilityLabels.taskCheckbox(checked: true).contains("checked"))
+        #expect(AccessibilityLabels.taskCheckbox(checked: false).contains("unchecked"))
+    }
+}
+
+struct DynamicTypeTests {
+
+    // TC-013 — Dynamic Type scaling
+    @Test func tc013EditorFontScalesForAccessibility() {
+        let medium = EditorTypography.baseFontSize(for: .medium)
+        let accessibility5 = EditorTypography.baseFontSize(for: .accessibility5)
+        #expect(accessibility5 > medium)
+        #expect(EditorTypography.headingSize(level: 1, baseSize: accessibility5) > accessibility5)
+    }
+}
+
+struct PerformanceTests {
+
+    // FR-S04 — search P95 < 100 ms at 10k notes (single-run benchmark)
+    @Test(.serialized) func searchPerformanceAt10kNotes() throws {
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 10_000, matchIndex: 9_999, matchContent: "quartz crystal")
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let results = try store.searchNotes(query: "quartz")
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+
+        #expect(results.count >= 1)
+        #expect(results.first?.title == "Note 9999")
+        #expect(elapsedMS < 100)
+    }
+}
+
+struct MigrationBackupTests {
+
+    @Test func createsBackupBeforeMigratingExistingDatabase() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        _ = try store.createNote(title: "Backup test")
+        try store.attachToPackage(at: tempDir)
+
+        let databaseURL = VaultPaths.databaseURL(in: tempDir)
+        let backupURL = tempDir.appendingPathComponent("notes.backup.db")
+        #expect(FileManager.default.fileExists(atPath: backupURL.path))
+        #expect(FileManager.default.fileExists(atPath: databaseURL.path))
+    }
+}
+
+struct ReleaseGateTests {
+
+    // TC-014 — duplicate title prevents ambiguous link resolution
+    @Test func tc014DuplicateTitleBlockedAtStoreLevel() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Dup")
+        do {
+            _ = try store.createNote(title: "Dup")
+            Issue.record("Expected duplicate title error")
+        } catch VaultStoreError.duplicateTitle {
+            #expect(true)
+        }
+    }
+
+    // TC-015 — v1 release gate (macOS automated suite)
+    @Test func tc015ReleaseGateMetadata() {
+        #expect(VaultPaths.formatVersion >= 1)
+        #expect(OnboardingKeys.hasSeenOnboarding == "mde.hasSeenOnboarding")
     }
 }

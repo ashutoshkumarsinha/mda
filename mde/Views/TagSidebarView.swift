@@ -15,6 +15,8 @@ struct TagSidebarView: View {
                 .tag(Optional<String>.none)
                 .font(.body.weight(selectedTagPath == nil ? .semibold : .regular))
                 .foregroundStyle(selectedTagPath == nil ? .primary : .secondary)
+                .accessibilityLabel(AccessibilityLabels.allTagsFilter)
+                .accessibilityAddTraits(selectedTagPath == nil ? .isSelected : [])
 
             ForEach(store.tagTree) { tag in
                 Text("#\(tag.path)")
@@ -22,9 +24,15 @@ struct TagSidebarView: View {
                     .padding(.leading, CGFloat(tag.level) * 12)
                     .font(.body.weight(selectedTagPath == tag.path ? .semibold : .regular))
                     .foregroundStyle(selectedTagPath == tag.path ? .primary : .secondary)
+                    .accessibilityLabel(
+                        AccessibilityLabels.tagFilter(path: tag.path, isSelected: selectedTagPath == tag.path)
+                    )
+                    .accessibilityAddTraits(selectedTagPath == tag.path ? .isSelected : [])
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Tags")
+        .accessibilityLabel(AccessibilityLabels.tagSidebar)
+        .focusSection()
     }
 }

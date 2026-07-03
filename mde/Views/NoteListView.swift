@@ -41,12 +41,16 @@ struct NoteListView: View {
         }
         .searchable(text: $searchQuery, prompt: "Search notes")
         .navigationTitle("Notes")
+        .accessibilityLabel(AccessibilityLabels.noteList)
+        .focusSection()
         .toolbar {
             ToolbarItem {
                 Button(action: addNote) {
                     Label("New Note", systemImage: "plus")
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                .accessibilityLabel("New note")
+                .help("Create a new note")
             }
         }
         .onAppear(perform: reload)
@@ -111,6 +115,12 @@ struct NoteListView: View {
                         }
                     }
                     .tag(result.id)
+                    .accessibilityLabel(
+                        AccessibilityLabels.searchResult(
+                            title: result.title.isEmpty ? "Untitled" : result.title,
+                            snippet: result.snippet
+                        )
+                    )
                 }
             }
         }
@@ -240,6 +250,16 @@ private struct NoteRowView: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            AccessibilityLabels.noteRow(
+                title: store.noteDisplayTitle(note),
+                snippet: store.noteSnippet(note),
+                isPinned: note.isPinned,
+                updatedAt: note.updatedAt
+            )
+        )
+        .accessibilityAddTraits(note.isPinned ? [.isSelected] : [])
     }
 }
 

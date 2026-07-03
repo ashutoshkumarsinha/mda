@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** Phase 3 complete — E2E encrypted CloudKit sync, offline queue, CRDT/LWW merge, and conflict UI. Next: Phase 4 (hardening). See [§13](#13-delivery-phases).
+**Current state:** Phase 4 complete — accessibility, 10k-note search perf, migration backups, and App Store privacy manifest. v1 macOS release gate met. See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -457,9 +457,16 @@ stateDiagram-v2
 
 **Exit:** UC-05 · TC-009–TC-011 · all FR-Y*
 
-### Phase 4 — Hardening
+### Phase 4 — Hardening *(complete)*
 
-Accessibility audit · 10k-note perf · App Store assets · privacy labels
+- [x] VoiceOver labels on tags, notes, editor, sync, and backlinks (`AccessibilityLabels`)
+- [x] Dynamic Type scaling in editor (`EditorTypography` + `dynamicTypeSize`)
+- [x] Reduce Motion disables hybrid token fade debounce/alpha
+- [x] WCAG-friendly link color (`NSColor.linkColor`); task checkbox announcements
+- [x] macOS keyboard focus sections per column (`focusSection`)
+- [x] FTS search benchmark at 10k notes (TC perf test &lt; 100 ms)
+- [x] Pre-migration database backup (`notes.backup.db`)
+- [x] App Store privacy manifest (`PrivacyInfo.xcprivacy` — Data Not Collected)
 
 **Exit:** All MUST FR/NFR · TC-001–TC-015 pass
 

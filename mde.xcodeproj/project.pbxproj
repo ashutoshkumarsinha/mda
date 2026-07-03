@@ -42,6 +42,7 @@
 			membershipExceptions = (
 				Info.plist,
 				mde.entitlements,
+				PrivacyInfo.xcprivacy,
 			);
 			target = 027481002FED070800B678AB /* mde */;
 		};
