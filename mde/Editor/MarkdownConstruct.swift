@@ -70,6 +70,10 @@ enum MarkdownConstructScanner {
         constructs.first { NSLocationInRange(location, $0.fullRange) }
     }
 
+    static func constructs(_ constructs: [MarkdownConstruct], intersecting range: NSRange) -> [MarkdownConstruct] {
+        constructs.filter { NSIntersectionRange($0.fullRange, range).length > 0 }
+    }
+
     private static func wikiLinkConstructs(in text: String) -> [MarkdownConstruct] {
         WikiLinkExtractor.linkRanges(in: text).map { link in
             let open = NSRange(location: link.fullRange.location, length: 2)

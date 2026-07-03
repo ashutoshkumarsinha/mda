@@ -56,9 +56,9 @@ struct MarkdownTextView: NSViewRepresentable {
         configureAccessibility(on: textView)
 
         context.coordinator.textView = textView
-        context.coordinator.styleOptions = styleOptions
+        context.coordinator.styleController.styleOptions = styleOptions
         context.coordinator.installClickGesture(on: textView)
-        context.coordinator.applyStyles()
+        context.coordinator.applyStyles(fullDocument: true)
 
         return scrollView
     }
@@ -66,14 +66,14 @@ struct MarkdownTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
-        context.coordinator.styleOptions = styleOptions
+        context.coordinator.styleController.styleOptions = styleOptions
         textView.font = .systemFont(ofSize: baseFontSize)
         configureAccessibility(on: textView)
         if textView.string != text {
             let selected = textView.selectedRanges
             textView.string = text
             textView.selectedRanges = selected
-            context.coordinator.applyStyles()
+            context.coordinator.applyStyles(fullDocument: true)
         }
     }
 
@@ -101,14 +101,10 @@ struct MarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var resolvedLinkTitles: Set<String>
-        var styleOptions = MarkdownStyleOptions()
+        let styleController = MarkdownEditorStyleController()
         var onTextChange: (String) -> Void
         var onWikiLinkClick: (String) -> Void
         weak var textView: NSTextView?
-        private var styleTask: Task<Void, Never>?
-        private var isApplyingStyles = false
-        private let parseActor = MarkdownParseActor()
-        private var cachedConstructs: [MarkdownConstruct] = []
 
         init(
             text: Binding<String>,
@@ -119,13 +115,14 @@ struct MarkdownTextView: NSViewRepresentable {
         ) {
             _text = text
             self.resolvedLinkTitles = resolvedLinkTitles
-            self.styleOptions = styleOptions
             self.onTextChange = onTextChange
             self.onWikiLinkClick = onWikiLinkClick
+            super.init()
+            styleController.styleOptions = styleOptions
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView, !isApplyingStyles else { return }
+            guard let textView, !styleController.isStyleApplicationInProgress else { return }
             let updated = textView.string
             text = updated
             onTextChange(updated)
@@ -143,12 +140,12 @@ struct MarkdownTextView: NSViewRepresentable {
 
             if let toggled = MarkdownEditorLogic.toggleTask(at: index, in: textView.string) {
                 let checked = toggled.contains("- [x]") || toggled.contains("- [X]")
-                isApplyingStyles = true
+                styleController.noteStyleApplicationBegan()
                 textView.string = toggled
                 text = toggled
                 onTextChange(toggled)
-                isApplyingStyles = false
-                applyStyles(constructs: cachedConstructs)
+                styleController.noteStyleApplicationEnded()
+                refreshAfterTextMutation(toggled, caret: index)
                 announceTaskToggle(checked: checked, on: textView)
                 return
             }
@@ -158,43 +155,64 @@ struct MarkdownTextView: NSViewRepresentable {
             }
         }
 
-        func applyStyles(constructs: [MarkdownConstruct]? = nil) {
+        func applyStyles(
+            constructs: [MarkdownConstruct]? = nil,
+            styleRange: NSRange? = nil,
+            fullDocument: Bool = false
+        ) {
             guard let textView, let storage = textView.textStorage else { return }
-            isApplyingStyles = true
-            let caret = textView.selectedRange().location
-            var options = styleOptions
-            options.suspendTokenHide = textView.hasMarkedText()
-            let activeConstructs = constructs ?? cachedConstructs
-            MarkdownStyler.apply(
-                to: storage,
-                text: textView.string,
-                caretLocation: caret,
-                constructs: activeConstructs,
-                options: options
-            )
-            isApplyingStyles = false
-        }
-
-        private func scheduleStyleApply() {
-            styleTask?.cancel()
-            guard let textView else { return }
-
-            if styleOptions.reduceMotion {
-                Task { await parseAndApply(text: textView.string) }
+            if fullDocument, constructs == nil, styleController.cachedConstructs.isEmpty {
+                Task {
+                    await styleController.parseAndApply(
+                        text: textView.string,
+                        caretLocation: textView.selectedRange().location,
+                        fullDocument: true
+                    ) { parsed, _ in
+                        self.applyStyles(constructs: parsed, fullDocument: true)
+                    }
+                }
                 return
             }
 
-            styleTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(300))
-                guard !Task.isCancelled else { return }
-                await parseAndApply(text: textView.string)
+            styleController.noteStyleApplicationBegan()
+            defer { styleController.noteStyleApplicationEnded() }
+
+            let caret = textView.selectedRange().location
+            let content = textView.string
+            var options = styleController.styleOptions
+            options.suspendTokenHide = textView.hasMarkedText()
+
+            let activeConstructs = constructs ?? styleController.cachedConstructs
+            let range = fullDocument
+                ? nil
+                : (styleRange ?? MarkdownLineIndex.stylingNeighborhood(in: content, caretLocation: caret))
+
+            MarkdownStyler.apply(
+                to: storage,
+                text: content,
+                caretLocation: caret,
+                constructs: activeConstructs,
+                options: options,
+                styleRange: range
+            )
+        }
+
+        private func scheduleStyleApply() {
+            guard let textView else { return }
+            let caret = textView.selectedRange().location
+            let content = textView.string
+
+            styleController.scheduleStyleApply(text: content, caretLocation: caret) { constructs, styleRange in
+                self.applyStyles(constructs: constructs, styleRange: styleRange)
             }
         }
 
-        private func parseAndApply(text: String) async {
-            let result = await parseActor.parse(text: text)
-            cachedConstructs = result.constructs
-            applyStyles(constructs: result.constructs)
+        private func refreshAfterTextMutation(_ content: String, caret: Int) {
+            Task {
+                await styleController.parseAndApply(text: content, caretLocation: caret) { constructs, styleRange in
+                    self.applyStyles(constructs: constructs, styleRange: styleRange)
+                }
+            }
         }
 
         func installClickGesture(on textView: NSTextView) {

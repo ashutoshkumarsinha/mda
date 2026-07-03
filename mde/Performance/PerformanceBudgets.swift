@@ -9,8 +9,10 @@
 import Foundation
 
 enum PerformanceBudgets {
-    // NFR-01
+    // NFR-01 — full-document pass (reduce motion / initial load)
     static let markdownStylePassMS: Double = 100
+    // NFR-01 — incremental caret-neighborhood pass (Phase 3 target)
+    static let incrementalMarkdownStyleMS: Double = 16
     static let markdownParseMS: Double = 300
 
     // NFR-02 (in-process proxy; full launch needs Instruments)

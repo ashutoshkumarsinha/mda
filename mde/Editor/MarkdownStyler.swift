@@ -29,15 +29,18 @@ enum MarkdownStyler {
         text: String,
         caretLocation: Int,
         constructs: [MarkdownConstruct],
-        options: MarkdownStyleOptions = MarkdownStyleOptions()
+        options: MarkdownStyleOptions = MarkdownStyleOptions(),
+        styleRange: NSRange? = nil
     ) {
-        PerformanceSignpost.measure(.markdownStyle) {
+        let signpost: PerformanceSignpost = styleRange == nil ? .markdownStyle : .markdownStyleIncremental
+        PerformanceSignpost.measure(signpost) {
             applyStyling(
                 to: storage,
                 text: text,
                 caretLocation: caretLocation,
                 constructs: constructs,
-                options: options
+                options: options,
+                styleRange: styleRange
             )
         }
     }
@@ -47,25 +50,30 @@ enum MarkdownStyler {
         text: String,
         caretLocation: Int,
         constructs: [MarkdownConstruct],
-        options: MarkdownStyleOptions
+        options: MarkdownStyleOptions,
+        styleRange: NSRange?
     ) {
         let length = (text as NSString).length
         guard length > 0 else { return }
 
+        let fullRange = NSRange(location: 0, length: length)
+        let targetRange = styleRange.map { NSIntersectionRange($0, fullRange) } ?? fullRange
+        guard targetRange.length > 0 else { return }
+
+        let scopedConstructs = MarkdownConstructScanner.constructs(constructs, intersecting: targetRange)
         let baseFont = EditorPlatform.systemFont(ofSize: options.baseFontSize)
-        let baseRange = NSRange(location: 0, length: length)
         let active = MarkdownConstructScanner.constructContaining(location: caretLocation, in: constructs)
 
         storage.beginEditing()
         storage.setAttributes([
             .font: baseFont,
             .foregroundColor: EditorPlatform.labelColor,
-        ], range: baseRange)
+        ], range: targetRange)
 
-        styleLines(in: text, storage: storage, options: options)
-        styleInline(in: text, storage: storage, options: options)
+        styleLines(in: text, storage: storage, options: options, styleRange: targetRange)
+        styleInline(in: text, storage: storage, options: options, styleRange: targetRange)
         applyHybridTokens(
-            constructs: constructs,
+            constructs: scopedConstructs,
             active: active,
             storage: storage,
             options: options
@@ -124,43 +132,61 @@ enum MarkdownStyler {
         }
     }
 
-    private static func styleLines(in text: String, storage: NSMutableAttributedString, options: MarkdownStyleOptions) {
+    private static func styleLines(
+        in text: String,
+        storage: NSMutableAttributedString,
+        options: MarkdownStyleOptions,
+        styleRange: NSRange
+    ) {
         let nsText = text as NSString
-        var location = 0
-        for line in text.components(separatedBy: "\n") {
-            let range = NSRange(location: location, length: (line as NSString).length)
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard styleRange.length > 0, nsText.length > 0 else { return }
 
-            if trimmed.hasPrefix("#") {
-                let level = trimmed.prefix(while: { $0 == "#" }).count
-                let size = EditorTypography.headingSize(level: level, baseSize: options.baseFontSize)
-                storage.addAttributes([
-                    .font: EditorPlatform.boldSystemFont(ofSize: size),
-                ], range: range)
-            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
-                storage.addAttributes([
-                    .paragraphStyle: listParagraphStyle(),
-                ], range: range)
+        var lineStart = styleRange.location
+        let stopAt = styleRange.upperBound
+
+        while lineStart < stopAt && lineStart < nsText.length {
+            let lineRange = nsText.lineRange(for: NSRange(location: lineStart, length: 0))
+            let applyRange = NSIntersectionRange(lineRange, styleRange)
+            if applyRange.length > 0 {
+                let line = nsText.substring(with: lineRange).trimmingCharacters(in: .newlines)
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+                if trimmed.hasPrefix("#") {
+                    let level = trimmed.prefix(while: { $0 == "#" }).count
+                    let size = EditorTypography.headingSize(level: level, baseSize: options.baseFontSize)
+                    storage.addAttributes([
+                        .font: EditorPlatform.boldSystemFont(ofSize: size),
+                    ], range: applyRange)
+                } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                    storage.addAttributes([
+                        .paragraphStyle: listParagraphStyle(),
+                    ], range: applyRange)
+                }
             }
 
-            location += (line as NSString).length + 1
-            if location > nsText.length { break }
+            guard lineRange.upperBound > lineStart else { break }
+            lineStart = lineRange.upperBound
         }
     }
 
-    private static func styleInline(in text: String, storage: NSMutableAttributedString, options: MarkdownStyleOptions) {
+    private static func styleInline(
+        in text: String,
+        storage: NSMutableAttributedString,
+        options: MarkdownStyleOptions,
+        styleRange: NSRange
+    ) {
         let baseFontSize = options.baseFontSize
-        applyPattern(#"\*\*([^*]+)\*\*"#, in: text, storage: storage) { range in
+        applyPattern(#"\*\*([^*]+)\*\*"#, in: text, storage: storage, styleRange: styleRange) { range in
             storage.addAttribute(.font, value: EditorPlatform.boldSystemFont(ofSize: baseFontSize), range: range)
         }
-        applyPattern(#"(?<!\*)\*([^*]+)\*(?!\*)"#, in: text, storage: storage) { range in
+        applyPattern(#"(?<!\*)\*([^*]+)\*(?!\*)"#, in: text, storage: storage, styleRange: styleRange) { range in
             storage.addAttribute(
                 .font,
                 value: EditorPlatform.italicSystemFont(ofSize: baseFontSize),
                 range: range
             )
         }
-        applyPattern(#"`([^`]+)`"#, in: text, storage: storage) { range in
+        applyPattern(#"`([^`]+)`"#, in: text, storage: storage, styleRange: styleRange) { range in
             storage.addAttribute(
                 .font,
                 value: EditorPlatform.monospacedSystemFont(ofSize: baseFontSize - 1),
@@ -173,13 +199,17 @@ enum MarkdownStyler {
         _ pattern: String,
         in text: String,
         storage: NSMutableAttributedString,
+        styleRange: NSRange,
         apply: (NSRange) -> Void
     ) {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         let nsText = text as NSString
-        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        let matches = regex.matches(in: text, range: styleRange)
         for match in matches where match.numberOfRanges > 1 {
-            apply(match.range(at: 1))
+            let contentRange = match.range(at: 1)
+            if NSIntersectionRange(contentRange, styleRange).length > 0 {
+                apply(contentRange)
+            }
         }
     }
 
@@ -202,7 +232,7 @@ extension MarkdownStyler {
         constructs: [MarkdownConstruct],
         options: MarkdownStyleOptions = MarkdownStyleOptions()
     ) {
-        apply(to: textStorage as NSMutableAttributedString, text: text, caretLocation: caretLocation, constructs: constructs, options: options)
+        apply(to: textStorage as NSMutableAttributedString, text: text, caretLocation: caretLocation, constructs: constructs, options: options, styleRange: nil)
     }
 }
 #endif

@@ -22,14 +22,16 @@ Establish budgets before changing behavior. View signposts in **Instruments → 
 | `vault_list_page` | `VaultStore.fetchNoteSummariesPage` |
 | `vault_export_database` | `VaultStore.exportDatabase()` |
 | `markdown_parse` | `MarkdownParseActor.parse()` |
-| `markdown_style` | `MarkdownStyler.apply()` |
+| `markdown_style` | `MarkdownStyler.apply()` (full document) |
+| `markdown_style_incremental` | `MarkdownStyler.apply(styleRange:)` |
 | `sync_perform` | `SyncCoordinator.performSync()` |
 
 ### Automated budgets (`PerformanceBudgets.swift`)
 
 | Budget | Value | Maps to |
 |--------|-------|---------|
-| `markdownStylePassMS` | 100 ms | NFR-01 (interim; target 16 ms in Phase 3) |
+| `markdownStylePassMS` | 100 ms | NFR-01 (full pass / reduce motion) |
+| `incrementalMarkdownStyleMS` | 16 ms | NFR-01 (caret neighborhood) |
 | `markdownParseMS` | 300 ms | NFR-01 |
 | `coldVaultOpenMS` | 2,000 ms | NFR-02 (in-process proxy) |
 | `memoryDelta1kNotesMB` | 120 MB | NFR-03 (test-host delta) |
@@ -76,10 +78,32 @@ Run: `xcodebuild -only-testing:mdeTests/Phase2OptimizationTests test`
 
 ---
 
+## Phase 3 — Editor optimization ✅
+
+1. **Incremental styling** — `MarkdownStyler.apply` accepts `styleRange`; styles caret neighborhood (±1 line) only during typing.
+2. **Parse cache** — `MarkdownParseActor` reuses constructs when `text.hashValue` unchanged; skips swift-markdown `Document` parse.
+3. **Shared controller** — `MarkdownEditorStyleController` coordinates debounced parse + apply for macOS/iOS.
+4. **iOS textStorage path** — `MarkdownUITextView` mutates `textStorage` in place (no `attributedText` reassignment).
+5. **Signpost** — `markdown_style_incremental` for neighborhood passes.
+
+### Budgets
+
+| Budget | Value | Maps to |
+|--------|-------|---------|
+| `incrementalMarkdownStyleMS` | 16 ms | NFR-01 keystroke styling |
+| `markdownStylePassMS` | 100 ms | Full-document / reduce-motion |
+
+### Tests (`Phase3OptimizationTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/Phase3OptimizationTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
+| 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |
 | 2026-07-03 | Phase 0: signposts, budgets, baseline tests, memory probe |

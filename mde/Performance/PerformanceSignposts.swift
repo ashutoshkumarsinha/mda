@@ -17,6 +17,7 @@ enum PerformanceSignpost {
     case vaultListPage
     case markdownParse
     case markdownStyle
+    case markdownStyleIncremental
     case syncPerform
 
     var name: StaticString {
@@ -31,6 +32,7 @@ enum PerformanceSignpost {
         case .vaultListPage: "vault_list_page"
         case .markdownParse: "markdown_parse"
         case .markdownStyle: "markdown_style"
+        case .markdownStyleIncremental: "markdown_style_incremental"
         case .syncPerform: "sync_perform"
         }
     }

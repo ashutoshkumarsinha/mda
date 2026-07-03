@@ -800,3 +800,58 @@ struct Phase2OptimizationTests {
         #expect(mtimeAfter == mtimeBefore)
     }
 }
+
+// MARK: - Phase 3 optimization
+
+struct Phase3OptimizationTests {
+
+    @Test func phase3StylingNeighborhoodIsSmallVersusDocument() {
+        let line = "# Heading\nParagraph with **bold** and `code`.\n"
+        let text = String(repeating: line, count: 500)
+        let caret = text.count / 2
+
+        let neighborhood = MarkdownLineIndex.stylingNeighborhood(in: text, caretLocation: caret)
+        #expect(neighborhood.length < text.count / 20)
+    }
+
+    @Test func phase3IncrementalStyleUnderNFR01Budget() {
+        let line = "# Heading\nParagraph with **bold** and `code`.\n"
+        let text = String(repeating: line, count: 500)
+        let caret = text.count / 2
+        let range = MarkdownLineIndex.stylingNeighborhood(in: text, caretLocation: caret)
+
+        let storage = NSMutableAttributedString(string: text)
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+
+        let start = CFAbsoluteTimeGetCurrent()
+        MarkdownStyler.apply(
+            to: storage,
+            text: text,
+            caretLocation: caret,
+            constructs: constructs,
+            styleRange: range
+        )
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(elapsedMS < PerformanceBudgets.incrementalMarkdownStyleMS)
+    }
+
+    @Test func phase3ParseCacheReusesConstructs() async {
+        let actor = MarkdownParseActor()
+        let text = "# Hello\n[[Link]] #tag"
+
+        let first = await actor.parse(text: text, caretLocation: 0)
+        let second = await actor.parse(text: text, caretLocation: text.count - 1)
+
+        #expect(!first.cacheHit)
+        #expect(second.cacheHit)
+        #expect(first.constructs.count == second.constructs.count)
+    }
+
+    @Test func phase3ConstructFilterRespectsStyleRange() {
+        let text = "# One\n# Two\n# Three\n"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let middleLine = MarkdownLineIndex.lineRange(containing: text.count / 2, in: text)
+        let scoped = MarkdownConstructScanner.constructs(constructs, intersecting: middleLine)
+        #expect(scoped.count == 1)
+    }
+}

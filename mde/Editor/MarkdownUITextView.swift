@@ -42,23 +42,23 @@ struct MarkdownUITextView: UIViewRepresentable {
         configureAccessibility(on: textView)
 
         context.coordinator.textView = textView
-        context.coordinator.styleOptions = styleOptions
+        context.coordinator.styleController.styleOptions = styleOptions
         context.coordinator.installTapGesture(on: textView)
-        context.coordinator.applyStyles()
+        context.coordinator.applyStyles(fullDocument: true)
 
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
-        context.coordinator.styleOptions = styleOptions
+        context.coordinator.styleController.styleOptions = styleOptions
         textView.font = .systemFont(ofSize: baseFontSize)
         configureAccessibility(on: textView)
         if textView.text != text {
             let selected = textView.selectedRange
             textView.text = text
             textView.selectedRange = selected
-            context.coordinator.applyStyles()
+            context.coordinator.applyStyles(fullDocument: true)
         }
     }
 
@@ -85,14 +85,10 @@ struct MarkdownUITextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         @Binding var text: String
         var resolvedLinkTitles: Set<String>
-        var styleOptions = MarkdownStyleOptions()
+        let styleController = MarkdownEditorStyleController()
         var onTextChange: (String) -> Void
         var onWikiLinkClick: (String) -> Void
         weak var textView: UITextView?
-        private var styleTask: Task<Void, Never>?
-        private var isApplyingStyles = false
-        private let parseActor = MarkdownParseActor()
-        private var cachedConstructs: [MarkdownConstruct] = []
 
         init(
             text: Binding<String>,
@@ -103,13 +99,14 @@ struct MarkdownUITextView: UIViewRepresentable {
         ) {
             _text = text
             self.resolvedLinkTitles = resolvedLinkTitles
-            self.styleOptions = styleOptions
             self.onTextChange = onTextChange
             self.onWikiLinkClick = onWikiLinkClick
+            super.init()
+            styleController.styleOptions = styleOptions
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            guard !isApplyingStyles else { return }
+            guard !styleController.isStyleApplicationInProgress else { return }
             let updated = textView.text ?? ""
             text = updated
             onTextChange(updated)
@@ -127,12 +124,12 @@ struct MarkdownUITextView: UIViewRepresentable {
             let index = textView.offset(from: textView.beginningOfDocument, to: position)
 
             if let toggled = MarkdownEditorLogic.toggleTask(at: index, in: textView.text) {
-                isApplyingStyles = true
+                styleController.noteStyleApplicationBegan()
                 textView.text = toggled
                 text = toggled
                 onTextChange(toggled)
-                isApplyingStyles = false
-                applyStyles(constructs: cachedConstructs)
+                styleController.noteStyleApplicationEnded()
+                refreshAfterTextMutation(toggled, caret: index)
                 return
             }
 
@@ -141,48 +138,64 @@ struct MarkdownUITextView: UIViewRepresentable {
             }
         }
 
-        func applyStyles(constructs: [MarkdownConstruct]? = nil) {
-            guard let textView else { return }
-            isApplyingStyles = true
+        func applyStyles(
+            constructs: [MarkdownConstruct]? = nil,
+            styleRange: NSRange? = nil,
+            fullDocument: Bool = false
+        ) {
+            guard let textView, let storage = textView.textStorage else { return }
+            if fullDocument, constructs == nil, styleController.cachedConstructs.isEmpty {
+                Task {
+                    await styleController.parseAndApply(
+                        text: textView.text ?? "",
+                        caretLocation: textView.selectedRange.location,
+                        fullDocument: true
+                    ) { parsed, _ in
+                        self.applyStyles(constructs: parsed, fullDocument: true)
+                    }
+                }
+                return
+            }
+
+            styleController.noteStyleApplicationBegan()
+            defer { styleController.noteStyleApplicationEnded() }
+
             let caret = textView.selectedRange.location
-            var options = styleOptions
-            options.suspendTokenHide = textView.markedTextRange != nil
             let content = textView.text ?? ""
-            let storage = NSMutableAttributedString(attributedString: textView.attributedText)
-            let activeConstructs = constructs ?? cachedConstructs
+            var options = styleController.styleOptions
+            options.suspendTokenHide = textView.markedTextRange != nil
+
+            let activeConstructs = constructs ?? styleController.cachedConstructs
+            let range = fullDocument
+                ? nil
+                : (styleRange ?? MarkdownLineIndex.stylingNeighborhood(in: content, caretLocation: caret))
+
             MarkdownStyler.apply(
                 to: storage,
                 text: content,
                 caretLocation: caret,
                 constructs: activeConstructs,
-                options: options
+                options: options,
+                styleRange: range
             )
-            let selected = textView.selectedRange
-            textView.attributedText = storage
-            textView.selectedRange = selected
-            isApplyingStyles = false
         }
 
         private func scheduleStyleApply() {
-            styleTask?.cancel()
             guard let textView else { return }
+            let caret = textView.selectedRange.location
+            let content = textView.text ?? ""
 
-            if styleOptions.reduceMotion {
-                Task { await parseAndApply(text: textView.text ?? "") }
-                return
-            }
-
-            styleTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(300))
-                guard !Task.isCancelled else { return }
-                await parseAndApply(text: textView.text ?? "")
+            styleController.scheduleStyleApply(text: content, caretLocation: caret) { constructs, styleRange in
+                self.applyStyles(constructs: constructs, styleRange: styleRange)
             }
         }
 
-        private func parseAndApply(text: String) async {
-            let result = await parseActor.parse(text: text)
-            cachedConstructs = result.constructs
-            applyStyles(constructs: result.constructs)
+        private func refreshAfterTextMutation(_ content: String, caret: Int) {
+            Task {
+                await styleController.parseAndApply(text: content, caretLocation: caret) { constructs, styleRange in
+                    self.applyStyles(constructs: constructs, styleRange: styleRange)
+                }
+            }
         }
 
         func installTapGesture(on textView: UITextView) {
@@ -198,7 +211,7 @@ extension MarkdownUITextView.Coordinator: UIGestureRecognizerDelegate {
         _ gestureRecognizer: UIGestureRecognizer,
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool {
-        true
+        otherGestureRecognizer != textView?.panGestureRecognizer
     }
 }
 #endif
