@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		024BE42F2FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481312FED070900B678AB /* GRDB */; };
+		024BE4302FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481332FED070900B678AB /* GRDB */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		027481122FED070900B678AB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				024BE42F2FF72AE600DE451E /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +78,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				024BE4302FF72AE600DE451E /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +132,7 @@
 			);
 			name = mde;
 			packageProductDependencies = (
+				027481312FED070900B678AB /* GRDB */,
 			);
 			productName = mde;
 			productReference = 027481012FED070800B678AB /* mde.app */;
@@ -148,6 +156,7 @@
 			);
 			name = mdeTests;
 			packageProductDependencies = (
+				027481332FED070900B678AB /* GRDB */,
 			);
 			productName = mdeTests;
 			productReference = 027481112FED070900B678AB /* mdeTests.xctest */;
@@ -208,6 +217,9 @@
 			);
 			mainGroup = 027480F82FED070800B678AB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 027481022FED070800B678AB /* Products */;
 			projectDirPath = "";
@@ -578,6 +590,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		027481312FED070900B678AB /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		027481332FED070900B678AB /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 027480F92FED070800B678AB /* Project object */;
 }

@@ -2,42 +2,29 @@
 //  MDEApp.swift
 //  MDE
 //
-//  Created by Deep Root on 6/25/26.
-//
 
 import SwiftUI
-import SwiftData
-import UniformTypeIdentifiers
 
 @main
 struct MDEApp: App {
     var body: some Scene {
-        DocumentGroup(editing: .itemDocument, migrationPlan: MDEMigrationPlan.self) {
-            ContentView()
+        DocumentGroup(newDocument: VaultDocument.init) { configuration in
+            VaultDocumentView(document: configuration.document, configuration: configuration)
         }
     }
 }
 
-extension UTType {
-    static var itemDocument: UTType {
-        UTType(importedAs: "name.aks.mde.document")
+private struct VaultDocumentView: View {
+    @ObservedObject var document: VaultDocument
+    let configuration: ReferenceFileDocumentConfiguration<VaultDocument>
+
+    var body: some View {
+        ContentView(store: document.store)
+            .onAppear {
+                document.bindToPackageIfNeeded(url: configuration.fileURL)
+            }
+            .onChange(of: configuration.fileURL) { _, newURL in
+                document.bindToPackageIfNeeded(url: newURL)
+            }
     }
-}
-
-struct MDEMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [VersionedSchema.Type] = [
-        MDEVersionedSchema.self,
-    ]
-
-    static var stages: [MigrationStage] = [
-        // Stages of migration between VersionedSchema, if required.
-    ]
-}
-
-struct MDEVersionedSchema: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
-
-    static var models: [any PersistentModel.Type] = [
-        Item.self,
-    ]
 }

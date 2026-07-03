@@ -16,7 +16,7 @@ spec.md  ──  WHAT   (requirements, syntax, tests, milestones)
 
 ## Project status
 
-**Phase 0** — `mde.xcodeproj` scaffold (SwiftData placeholder). Next: GRDB vault package per [spec §6](./spec.md#6-document--vault-model). Roadmap: [spec §13](./spec.md#13-delivery-phases).
+**Phase 0 complete** — `mde.xcodeproj` uses GRDB with `.mde` vault packages. Next: Phase 1 per [spec §13](./spec.md#13-delivery-phases).
 
 ## Quick reference
 

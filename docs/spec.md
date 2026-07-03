@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** `mde.xcodeproj` is a Phase 0 scaffold (SwiftData `Item` placeholder). Target stack: GRDB, TextKit 2, swift-markdown, CloudKit — see [§13](#13-delivery-phases).
+**Current state:** Phase 0 complete — GRDB vault (`.mde` package) replaces SwiftData. Next: Phase 1 (editor, tags, FTS UI). See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -411,12 +411,12 @@ stateDiagram-v2
 
 ## 13. Delivery phases
 
-### Phase 0 — Scaffold *(in progress)*
+### Phase 0 — Scaffold *(complete)*
 
 - [x] Xcode targets `mde` / `mdeTests` / `mdeUITests`
 - [x] MDE branding, bundle ID, `.mde` document type
-- [ ] Replace SwiftData with GRDB + vault package layout
-- [ ] CI: build + test on macOS
+- [x] Replace SwiftData with GRDB + vault package layout
+- [x] CI: build + test on macOS (`.github/workflows/ci.yml`)
 
 **Exit:** Builds clean; `TC-000` passes.
 
