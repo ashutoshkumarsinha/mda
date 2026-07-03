@@ -1,23 +1,23 @@
 //
-//  MarkdownTextView.swift
+//  MarkdownUITextView.swift
 //  MDE
 //
 
-#if os(macOS)
-import AppKit
+#if os(iOS)
 import SwiftUI
+import UIKit
 
-private final class PlainTextPasteTextView: NSTextView {
+private final class PlainTextPasteUITextView: UITextView {
     override func paste(_ sender: Any?) {
-        guard let string = NSPasteboard.general.string(forType: .string) else {
+        guard let string = UIPasteboard.general.string else {
             super.paste(sender)
             return
         }
-        insertText(string, replacementRange: selectedRange())
+        insertText(string)
     }
 }
 
-struct MarkdownTextView: NSViewRepresentable {
+struct MarkdownUITextView: UIViewRepresentable {
     @Binding var text: String
     var resolvedLinkTitles: Set<String>
     var baseFontSize: CGFloat
@@ -26,53 +26,38 @@ struct MarkdownTextView: NSViewRepresentable {
     var onTextChange: (String) -> Void
     var onWikiLinkClick: (String) -> Void
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
-
-        let textView = PlainTextPasteTextView()
+    func makeUIView(context: Context) -> UITextView {
+        let textView = PlainTextPasteUITextView()
         textView.delegate = context.coordinator
-        textView.isRichText = true
-        textView.importsGraphics = false
-        textView.allowsUndo = true
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
         textView.font = .systemFont(ofSize: baseFontSize)
-        textView.textContainerInset = NSSize(width: 16, height: 16)
-        textView.string = text
-        textView.backgroundColor = .textBackgroundColor
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-
-        scrollView.documentView = textView
+        textView.text = text
+        textView.backgroundColor = .systemBackground
+        textView.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+        textView.isScrollEnabled = true
+        textView.alwaysBounceVertical = true
+        textView.autocorrectionType = .yes
+        textView.smartDashesType = .no
+        textView.smartQuotesType = .no
 
         configureAccessibility(on: textView)
 
         context.coordinator.textView = textView
         context.coordinator.styleOptions = styleOptions
-        context.coordinator.installClickGesture(on: textView)
+        context.coordinator.installTapGesture(on: textView)
         context.coordinator.applyStyles()
 
-        return scrollView
+        return textView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+    func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
         context.coordinator.styleOptions = styleOptions
         textView.font = .systemFont(ofSize: baseFontSize)
         configureAccessibility(on: textView)
-        if textView.string != text {
-            let selected = textView.selectedRanges
-            textView.string = text
-            textView.selectedRanges = selected
+        if textView.text != text {
+            let selected = textView.selectedRange
+            textView.text = text
+            textView.selectedRange = selected
             context.coordinator.applyStyles()
         }
     }
@@ -91,20 +76,19 @@ struct MarkdownTextView: NSViewRepresentable {
         MarkdownStyleOptions(baseFontSize: baseFontSize, reduceMotion: reduceMotion)
     }
 
-    private func configureAccessibility(on textView: NSTextView) {
-        textView.setAccessibilityLabel(AccessibilityLabels.editorPlaceholder(noteTitle: noteTitle))
-        textView.setAccessibilityRole(.textArea)
-        textView.setAccessibilityHelp("Markdown note editor")
-        textView.setAccessibilityIdentifier("note-editor")
+    private func configureAccessibility(on textView: UITextView) {
+        textView.accessibilityLabel = AccessibilityLabels.editorPlaceholder(noteTitle: noteTitle)
+        textView.accessibilityHint = "Markdown note editor"
+        textView.accessibilityIdentifier = "note-editor"
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate {
         @Binding var text: String
         var resolvedLinkTitles: Set<String>
         var styleOptions = MarkdownStyleOptions()
         var onTextChange: (String) -> Void
         var onWikiLinkClick: (String) -> Void
-        weak var textView: NSTextView?
+        weak var textView: UITextView?
         private var styleTask: Task<Void, Never>?
         private var isApplyingStyles = false
         private let parseActor = MarkdownParseActor()
@@ -124,54 +108,58 @@ struct MarkdownTextView: NSViewRepresentable {
             self.onWikiLinkClick = onWikiLinkClick
         }
 
-        func textDidChange(_ notification: Notification) {
-            guard let textView, !isApplyingStyles else { return }
-            let updated = textView.string
+        func textViewDidChange(_ textView: UITextView) {
+            guard !isApplyingStyles else { return }
+            let updated = textView.text ?? ""
             text = updated
             onTextChange(updated)
             scheduleStyleApply()
         }
 
-        func textViewDidChangeSelection(_ notification: Notification) {
+        func textViewDidChangeSelection(_ textView: UITextView) {
             scheduleStyleApply()
         }
 
-        @objc func handleClick(_ gesture: NSClickGestureRecognizer) {
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let textView else { return }
             let point = gesture.location(in: textView)
-            let index = textView.characterIndexForInsertion(at: point)
+            guard let position = textView.closestPosition(to: point) else { return }
+            let index = textView.offset(from: textView.beginningOfDocument, to: position)
 
-            if let toggled = MarkdownEditorLogic.toggleTask(at: index, in: textView.string) {
-                let checked = toggled.contains("- [x]") || toggled.contains("- [X]")
+            if let toggled = MarkdownEditorLogic.toggleTask(at: index, in: textView.text) {
                 isApplyingStyles = true
-                textView.string = toggled
+                textView.text = toggled
                 text = toggled
                 onTextChange(toggled)
                 isApplyingStyles = false
                 applyStyles(constructs: cachedConstructs)
-                announceTaskToggle(checked: checked, on: textView)
                 return
             }
 
-            if let title = MarkdownEditorLogic.wikiLinkTitle(at: index, in: textView.string) {
+            if let title = MarkdownEditorLogic.wikiLinkTitle(at: index, in: textView.text) {
                 onWikiLinkClick(title)
             }
         }
 
         func applyStyles(constructs: [MarkdownConstruct]? = nil) {
-            guard let textView, let storage = textView.textStorage else { return }
+            guard let textView else { return }
             isApplyingStyles = true
-            let caret = textView.selectedRange().location
+            let caret = textView.selectedRange.location
             var options = styleOptions
-            options.suspendTokenHide = textView.hasMarkedText()
+            options.suspendTokenHide = textView.markedTextRange != nil
+            let content = textView.text ?? ""
+            let storage = NSMutableAttributedString(attributedString: textView.attributedText)
             let activeConstructs = constructs ?? cachedConstructs
             MarkdownStyler.apply(
                 to: storage,
-                text: textView.string,
+                text: content,
                 caretLocation: caret,
                 constructs: activeConstructs,
                 options: options
             )
+            let selected = textView.selectedRange
+            textView.attributedText = storage
+            textView.selectedRange = selected
             isApplyingStyles = false
         }
 
@@ -180,14 +168,14 @@ struct MarkdownTextView: NSViewRepresentable {
             guard let textView else { return }
 
             if styleOptions.reduceMotion {
-                Task { await parseAndApply(text: textView.string) }
+                Task { await parseAndApply(text: textView.text ?? "") }
                 return
             }
 
             styleTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
-                await parseAndApply(text: textView.string)
+                await parseAndApply(text: textView.text ?? "")
             }
         }
 
@@ -197,20 +185,20 @@ struct MarkdownTextView: NSViewRepresentable {
             applyStyles(constructs: result.constructs)
         }
 
-        func installClickGesture(on textView: NSTextView) {
-            let gesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
+        func installTapGesture(on textView: UITextView) {
+            let gesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            gesture.delegate = self
             textView.addGestureRecognizer(gesture)
         }
+    }
+}
 
-        private func announceTaskToggle(checked: Bool, on textView: NSTextView) {
-            let message = AccessibilityLabels.taskCheckbox(checked: checked)
-            textView.setAccessibilityValue(message)
-            NSAccessibility.post(
-                element: textView,
-                notification: .announcementRequested,
-                userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high]
-            )
-        }
+extension MarkdownUITextView.Coordinator: UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 }
 #endif

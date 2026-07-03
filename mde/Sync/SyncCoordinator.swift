@@ -134,10 +134,12 @@ final class SyncCoordinator {
     private func performSync(using key: SymmetricKey) async {
         status = .syncing
         do {
-            try await pushPending(using: key)
-            try await pullRemote(using: key)
-            try store.updateLastSyncedAt(Date())
-            await refreshPendingCount()
+            try await PerformanceSignpost.measure(.syncPerform) {
+                try await pushPending(using: key)
+                try await pullRemote(using: key)
+                try store.updateLastSyncedAt(Date())
+                await refreshPendingCount()
+            }
             status = forceOffline ? .offline : .idle
         } catch SyncError.transportUnavailable {
             status = .offline

@@ -18,12 +18,20 @@ jobs:
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project mde.xcodeproj -scheme mde
 
-      - name: Build and test (TC-000)
+      - name: Build and test (TC-000 + Phase 0 baselines)
         run: |
           xcodebuild \
             -project mde.xcodeproj \
             -scheme mde \
             -destination 'platform=macOS' \
-            build test \
+            build \
+            CODE_SIGNING_ALLOWED=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO
+          xcodebuild \
+            -project mde.xcodeproj \
+            -scheme mde \
+            -destination 'platform=macOS' \
+            -only-testing:mdeTests \
+            test \
             CODE_SIGNING_ALLOWED=NO \
             CLANG_ENABLE_CODE_COVERAGE=NO

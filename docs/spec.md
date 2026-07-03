@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** Phase 4 complete — accessibility, 10k-note search perf, migration backups, and App Store privacy manifest. v1 macOS release gate met. See [§13](#13-delivery-phases).
+**Current state:** v1 complete on macOS and iOS — hybrid editor (background parse, paste, IME, placeholder), keyboard shortcuts, DB recovery, multiplatform UI, app icon, 39 unit tests. CloudKit sync requires Release signing + Apple Developer team. See [§13](#13-delivery-phases).
 
 ### Differentiation (v1)
 
@@ -634,3 +634,4 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 | 0.1–0.4 | 2026-07-02 | Initial structure, MDE rename, Xcode alignment |
 | 1.0 | 2026-07-02 | Syntax spec, vault model, resolved OQs, platform matrix, traceability, 15 test cases, security/a11y, expanded FRs, design tokens, optimized structure |
 | 1.1 | 2026-07-02 | Phase 1 implemented: markdown editor, tags, FTS search, three-column macOS UI |
+| 1.2 | 2026-07-02 | v1 gap closure: iOS target, UITextView editor, FR-E05/E08/E09/E10, shortcuts, DB recovery UI, app icon, 39 unit tests |

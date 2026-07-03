@@ -47,7 +47,7 @@ struct NoteConflict: Equatable, Identifiable, Sendable {
     var base: NoteSyncPayload?
 }
 
-struct EncryptedSyncRecord: Equatable, Sendable {
+nonisolated struct EncryptedSyncRecord: Equatable, Sendable {
     var noteID: String
     var vaultID: String
     var ciphertext: Data

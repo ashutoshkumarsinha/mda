@@ -118,7 +118,7 @@ enum DatabaseSchema {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: databaseURL.path) else { return }
 
-        let backupURL = databaseURL.deletingLastPathComponent().appendingPathComponent("notes.backup.db")
+        let backupURL = VaultPaths.backupDatabaseURL(in: databaseURL.deletingLastPathComponent())
         if fileManager.fileExists(atPath: backupURL.path) {
             try fileManager.removeItem(at: backupURL)
         }

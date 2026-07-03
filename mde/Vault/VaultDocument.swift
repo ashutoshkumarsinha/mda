@@ -37,6 +37,13 @@ final class VaultDocument: ReferenceFileDocument, ObservableObject {
         do {
             try store.attachToPackage(at: url)
             objectWillChange.send()
+        } catch let error as VaultError {
+            if case .databaseCorrupt = error {
+                store.needsDatabaseRecovery = true
+                objectWillChange.send()
+            } else {
+                assertionFailure("Failed to attach vault to package: \(error)")
+            }
         } catch {
             assertionFailure("Failed to attach vault to package: \(error)")
         }

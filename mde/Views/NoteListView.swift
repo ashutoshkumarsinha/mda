@@ -11,10 +11,11 @@ struct NoteListView: View {
     @Binding var searchQuery: String
     let tagPath: String?
 
-    @State private var displayedNotes: [Note] = []
+    @State private var displayedNotes: [NoteListItem] = []
     @State private var searchResults: [SearchResult] = []
     @State private var errorMessage: String?
-    @State private var mergePrimaryNote: Note?
+    @State private var mergePrimaryNote: NoteListItem?
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -29,7 +30,7 @@ struct NoteListView: View {
             } else {
                 List(selection: $selectedNoteID) {
                     ForEach(displayedNotes) { note in
-                        NoteRowView(note: note, store: store)
+                        NoteRowView(item: note, store: store)
                             .tag(note.id)
                             .contextMenu {
                                 noteContextMenu(for: note)
@@ -42,7 +43,10 @@ struct NoteListView: View {
         .searchable(text: $searchQuery, prompt: "Search notes")
         .navigationTitle("Notes")
         .accessibilityLabel(AccessibilityLabels.noteList)
+        .accessibilityIdentifier("note-list")
+        #if os(macOS)
         .focusSection()
+        #endif
         .toolbar {
             ToolbarItem {
                 Button(action: addNote) {
@@ -55,9 +59,9 @@ struct NoteListView: View {
         }
         .onAppear(perform: reload)
         .onChange(of: tagPath) { _, _ in reload() }
-        .onChange(of: store.notes) { _, _ in reload() }
+        .onChange(of: store.listRevision) { _, _ in reload() }
         .onChange(of: searchQuery) { _, newValue in
-            performSearch(query: newValue)
+            scheduleSearch(query: newValue)
         }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
@@ -127,7 +131,7 @@ struct NoteListView: View {
     }
 
     @ViewBuilder
-    private func noteContextMenu(for note: Note) -> some View {
+    private func noteContextMenu(for note: NoteListItem) -> some View {
         Button(note.isPinned ? "Unpin" : "Pin") {
             togglePin(note)
         }
@@ -145,12 +149,28 @@ struct NoteListView: View {
 
     private func reload() {
         do {
-            displayedNotes = try store.notesFiltered(by: tagPath)
+            displayedNotes = try store.noteSummariesFiltered(by: tagPath)
             if let selectedNoteID, !displayedNotes.contains(where: { $0.id == selectedNoteID }) {
                 self.selectedNoteID = displayedNotes.first?.id
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func scheduleSearch(query: String) {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            searchResults = []
+            return
+        }
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                performSearch(query: trimmed)
+            }
         }
     }
 
@@ -169,41 +189,40 @@ struct NoteListView: View {
         do {
             let note = try store.createNote()
             selectedNoteID = note.id
-            try store.persistToPackageIfNeeded()
-            reload()
+            try store.flushPackageIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     private func deleteNotes(at offsets: IndexSet) {
+        let legacyNotes = displayedNotes.map {
+            Note(id: $0.id, title: $0.title, content: "", updatedAt: $0.updatedAt, isPinned: $0.isPinned)
+        }
         do {
-            try store.softDeleteNotes(at: offsets, in: displayedNotes)
-            try store.persistToPackageIfNeeded()
-            reload()
+            try store.softDeleteNotes(at: offsets, in: legacyNotes)
+            try store.flushPackageIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func deleteNote(_ note: Note) {
+    private func deleteNote(_ note: NoteListItem) {
         do {
             try store.softDeleteNote(id: note.id)
-            try store.persistToPackageIfNeeded()
+            try store.flushPackageIfNeeded()
             if selectedNoteID == note.id {
                 selectedNoteID = displayedNotes.first(where: { $0.id != note.id })?.id
             }
-            reload()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func togglePin(_ note: Note) {
+    private func togglePin(_ note: NoteListItem) {
         do {
             try store.togglePin(id: note.id)
-            try store.persistToPackageIfNeeded()
-            reload()
+            try store.flushPackageIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -212,9 +231,8 @@ struct NoteListView: View {
     private func performMerge(primaryID: String, otherIDs: [String]) {
         do {
             let merged = try store.mergeNotes(primaryID: primaryID, otherIDs: otherIDs)
-            try store.persistToPackageIfNeeded()
+            try store.flushPackageIfNeeded()
             selectedNoteID = merged.id
-            reload()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -222,12 +240,12 @@ struct NoteListView: View {
 }
 
 private struct NoteRowView: View {
-    let note: Note
+    let item: NoteListItem
     let store: VaultStore
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            if note.isPinned {
+            if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -235,16 +253,16 @@ private struct NoteRowView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.noteDisplayTitle(note))
+                Text(store.noteDisplayTitle(item))
                     .font(.headline)
                     .lineLimit(1)
-                if !store.noteSnippet(note).isEmpty {
-                    Text(store.noteSnippet(note))
+                if !store.noteSnippet(item).isEmpty {
+                    Text(store.noteSnippet(item))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text(note.updatedAt, format: .relative(presentation: .named))
+                Text(item.updatedAt, format: .relative(presentation: .named))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -253,20 +271,20 @@ private struct NoteRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             AccessibilityLabels.noteRow(
-                title: store.noteDisplayTitle(note),
-                snippet: store.noteSnippet(note),
-                isPinned: note.isPinned,
-                updatedAt: note.updatedAt
+                title: store.noteDisplayTitle(item),
+                snippet: store.noteSnippet(item),
+                isPinned: item.isPinned,
+                updatedAt: item.updatedAt
             )
         )
-        .accessibilityAddTraits(note.isPinned ? [.isSelected] : [])
+        .accessibilityAddTraits(item.isPinned ? [.isSelected] : [])
     }
 }
 
 private struct MergeNotesSheet: View {
     let store: VaultStore
     let primaryID: String
-    let candidates: [Note]
+    let candidates: [NoteListItem]
     let onMerge: ([String]) -> Void
     let onCancel: () -> Void
 
@@ -277,7 +295,7 @@ private struct MergeNotesSheet: View {
             Text("Merge into Primary Note")
                 .font(.headline)
 
-            if let primary = store.notes.first(where: { $0.id == primaryID }) {
+            if let primary = store.noteSummary(id: primaryID) {
                 Text("Primary: \(store.noteDisplayTitle(primary))")
                     .foregroundStyle(.secondary)
             }

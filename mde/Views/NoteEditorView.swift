@@ -15,34 +15,48 @@ struct NoteEditorView: View {
 
     @State private var editorText = ""
     @State private var loadedNoteID: String?
-    @State private var backlinks: [Note] = []
+    @State private var backlinks: [NoteListItem] = []
     @State private var errorMessage: String?
     @State private var pendingWikiLinkTitle: String?
     @State private var showCreateWikiLinkSheet = false
 
     var body: some View {
         Group {
-            if let noteID, let note = store.notes.first(where: { $0.id == noteID }) {
+            if let activeNoteID = noteID, let summary = store.noteSummary(id: activeNoteID) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(store.noteDisplayTitle(note))
+                    Text(store.noteDisplayTitle(summary))
                         .font(.title3.weight(.semibold))
                         .padding(.horizontal, 16)
                         .padding(.top, 12)
                         .padding(.bottom, 4)
                         .accessibilityAddTraits(.isHeader)
 
+                    if let autosaveError = store.autosaveErrorMessage {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(autosaveError)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                        .accessibilityLabel("Save error: \(autosaveError)")
+                    }
+
                     if !backlinks.isEmpty {
                         backlinksPanel
                     }
 
-                    MarkdownTextView(
+                    PlatformMarkdownEditor(
                         text: $editorText,
                         resolvedLinkTitles: store.resolvedWikiLinkTitles(in: editorText),
                         baseFontSize: EditorTypography.baseFontSize(for: dynamicTypeSize),
                         reduceMotion: reduceMotion,
-                        noteTitle: store.noteDisplayTitle(note),
+                        noteTitle: store.noteDisplayTitle(summary),
                         onTextChange: { updated in
-                            store.scheduleAutosave(noteID: noteID, content: updated)
+                            store.scheduleAutosave(noteID: activeNoteID, content: updated)
                         },
                         onWikiLinkClick: { title in
                             handleWikiLinkClick(title)
@@ -50,27 +64,39 @@ struct NoteEditorView: View {
                     )
                 }
                 .accessibilityLabel(AccessibilityLabels.noteEditor)
+                #if os(macOS)
                 .focusSection()
+                #endif
                 .onAppear {
-                    load(note: note)
-                    reloadBacklinks(for: note)
+                    loadNote(id: activeNoteID)
+                    reloadBacklinks(noteID: activeNoteID, title: summary.title)
                 }
-                .onChange(of: noteID) { _, _ in
-                    if let note = store.notes.first(where: { $0.id == noteID }) {
-                        load(note: note)
-                        reloadBacklinks(for: note)
+                .onChange(of: noteID) { _, newID in
+                    guard let newID else { return }
+                    loadNote(id: newID)
+                    if let summary = store.noteSummary(id: newID) {
+                        reloadBacklinks(noteID: newID, title: summary.title)
                     }
                 }
-                .onChange(of: note.content) { _, newValue in
-                    if noteID == loadedNoteID, editorText != newValue {
-                        editorText = newValue
+                .onChange(of: store.contentEpoch) { _, _ in
+                    syncEditorFromStore(noteID: activeNoteID)
+                }
+                .onChange(of: store.listRevision) { _, _ in
+                    if store.noteSummary(id: activeNoteID) == nil {
+                        selectedNoteID = nil
                     }
                 }
-                .onChange(of: store.notes) { _, _ in
-                    if let note = store.notes.first(where: { $0.id == noteID }) {
-                        reloadBacklinks(for: note)
+                .onChange(of: store.linksRevision) { _, _ in
+                    if let summary = store.noteSummary(id: activeNoteID) {
+                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
                     }
                 }
+                .onChange(of: store.autosaveErrorMessage) { _, message in
+                    if let message {
+                        errorMessage = message
+                    }
+                }
+                .background(shortcutButtons(noteID: activeNoteID))
             } else {
                 ContentUnavailableView(
                     "Select a note",
@@ -104,6 +130,25 @@ struct NoteEditorView: View {
         }
     }
 
+    @ViewBuilder
+    private func shortcutButtons(noteID: String) -> some View {
+        Group {
+            Button("") { saveNow(noteID: noteID) }
+                .keyboardShortcut("s", modifiers: .command)
+                .hidden()
+
+            Button("") { selectedNoteID = nil }
+                .keyboardShortcut("w", modifiers: .command)
+                .hidden()
+
+            Button("") { togglePin(noteID: noteID) }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .hidden()
+        }
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
     private var backlinksPanel: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Backlinks")
@@ -130,16 +175,42 @@ struct NoteEditorView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func load(note: Note) {
-        loadedNoteID = note.id
+    private func loadNote(id: String) {
+        loadedNoteID = id
+        if let note = try? store.fetchNote(id: id) {
+            editorText = note.content
+        }
+    }
+
+    private func syncEditorFromStore(noteID: String) {
+        guard noteID == loadedNoteID,
+              let note = try? store.fetchNote(id: noteID),
+              editorText != note.content else { return }
         editorText = note.content
     }
 
-    private func reloadBacklinks(for note: Note) {
+    private func reloadBacklinks(noteID: String, title: String) {
         do {
-            backlinks = try store.fetchBacklinks(for: note.id, title: note.title)
+            backlinks = try store.fetchBacklinkSummaries(for: noteID, title: title)
         } catch {
             backlinks = []
+        }
+    }
+
+    private func saveNow(noteID: String) {
+        do {
+            try store.saveNow(noteID: noteID, content: editorText)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func togglePin(noteID: String) {
+        do {
+            try store.togglePin(id: noteID)
+            try store.flushPackageIfNeeded()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -155,7 +226,7 @@ struct NoteEditorView: View {
     private func createWikiLinkTarget(title: String) {
         do {
             let note = try store.createNote(title: title)
-            try store.persistToPackageIfNeeded()
+            try store.flushPackageIfNeeded()
             selectedNoteID = note.id
         } catch {
             errorMessage = error.localizedDescription

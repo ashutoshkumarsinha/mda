@@ -155,7 +155,9 @@ struct VaultStoreTests {
         let reloaded = VaultStore()
         let snapshot = try store.makeSnapshot()
         try reloaded.load(from: snapshot.makeFileWrapper())
-        #expect(reloaded.notes.first?.content.contains("inbox") == true)
+        #expect(reloaded.notes.count == 1)
+        let body = try reloaded.fetchNote(id: note.id)?.content ?? ""
+        #expect(body.contains("inbox"))
     }
 
     // TC-002 — Tag sidebar filter
@@ -244,7 +246,8 @@ struct VaultStoreTests {
         let reloaded = VaultStore()
         let snapshot = try store.makeSnapshot()
         try reloaded.load(from: snapshot.makeFileWrapper())
-        #expect(reloaded.notes.first?.content.contains("- [x] task") == true)
+        let saved = try reloaded.fetchNote(id: note.id)
+        #expect(saved?.content.contains("- [x] task") == true)
     }
 }
 
@@ -341,7 +344,9 @@ struct SyncCoordinatorTests {
         try await coordinator.enableSync()
         await coordinator.syncNow()
 
-        #expect(storeB.notes.contains(where: { $0.id == note.id && $0.content.contains("Mac") }))
+        #expect(storeB.notes.contains(where: { $0.id == note.id }))
+        let synced = try storeB.fetchNote(id: note.id)
+        #expect(synced?.content.contains("Mac") == true)
     }
 
     @Test(.serialized) func tc010OfflineEditSyncsWithoutDuplication() async throws {
@@ -451,7 +456,7 @@ struct PerformanceTests {
 
         #expect(results.count >= 1)
         #expect(results.first?.title == "Note 9999")
-        #expect(elapsedMS < 100)
+        #expect(elapsedMS < PerformanceBudgets.search10kNotesMS)
     }
 }
 
@@ -488,9 +493,242 @@ struct ReleaseGateTests {
         }
     }
 
-    // TC-015 — v1 release gate (macOS automated suite)
+    @Test func duplicateTitleSurfacesOnSaveNow() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Alpha", content: "# Alpha\none")
+        let second = try store.createNote(title: "Beta", content: "two")
+
+        do {
+            try store.saveNow(noteID: second.id, content: "# Alpha\nconflict")
+            Issue.record("Expected duplicate title on save")
+        } catch VaultStoreError.duplicateTitle {
+            #expect(store.autosaveErrorMessage?.contains("Alpha") == true)
+        }
+    }
+
+    // TC-015 — v1 release gate (macOS + iOS automated suite)
     @Test func tc015ReleaseGateMetadata() {
         #expect(VaultPaths.formatVersion >= 1)
         #expect(OnboardingKeys.hasSeenOnboarding == "mde.hasSeenOnboarding")
+    }
+}
+
+struct DatabaseRecoveryTests {
+
+    @Test func restoresFromBackupWhenDatabaseCorrupt() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        _ = try store.createNote(title: "Recoverable", content: "Keep me")
+        try store.attachToPackage(at: tempDir)
+
+        let databaseURL = VaultPaths.databaseURL(in: tempDir)
+        let backupURL = VaultPaths.backupDatabaseURL(in: tempDir)
+        #expect(FileManager.default.fileExists(atPath: backupURL.path))
+
+        try Data().write(to: databaseURL, options: .atomic)
+
+        let recoveryStore = VaultStore()
+        do {
+            try recoveryStore.attachToPackage(at: tempDir)
+            Issue.record("Expected corrupt database error")
+        } catch VaultError.databaseCorrupt {
+            #expect(recoveryStore.needsDatabaseRecovery)
+        }
+
+        try recoveryStore.restoreDatabaseFromBackup()
+        #expect(recoveryStore.notes.contains { $0.title == "Recoverable" })
+        #expect(recoveryStore.needsDatabaseRecovery == false)
+    }
+}
+
+struct MarkdownParseActorTests {
+
+    @Test func parsesConstructsOffMainActor() async {
+        let actor = MarkdownParseActor()
+        let result = await actor.parse(text: "# Hello\n[[Link]] #tag")
+        #expect(!result.constructs.isEmpty)
+        #expect(result.documentParseSucceeded)
+    }
+}
+
+struct PerformanceBudgetTests {
+
+    @Test func coldStoreRefreshUnderBudget() throws {
+        let store = VaultStore()
+        let start = CFAbsoluteTimeGetCurrent()
+        for index in 0..<100 {
+            _ = try store.createNote(title: "Note \(index)", content: "Body \(index)")
+        }
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(store.notes.count == 100)
+        #expect(elapsedMS < 5_000)
+    }
+}
+
+// MARK: - Phase 0 baselines (instrumentation + regression gates)
+
+struct Phase0BaselineTests {
+
+    @Test func phase0ColdVaultOpenUnderNFR02() throws {
+        let start = CFAbsoluteTimeGetCurrent()
+        let store = VaultStore()
+        _ = try store.createNote(title: "Warm", content: "Editor ready")
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(store.notes.count == 1)
+        #expect(elapsedMS < PerformanceBudgets.coldVaultOpenMS)
+    }
+
+    @Test(.serialized) func phase0RefreshAllAt1kNotes() throws {
+        let store = VaultStore()
+        let metrics = try store.measureLoad1kNotesIntoCache()
+        #expect(store.notes.count == 1_000)
+        #expect(metrics.refreshMS < PerformanceBudgets.refreshAll1kNotesMS)
+        #expect(metrics.memoryDeltaMB < PerformanceBudgets.memoryDelta1kNotesMB)
+    }
+
+    @Test(.serialized) func phase0UpdateNoteIn1kVault() throws {
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 1_000, matchIndex: -1, matchContent: "")
+        try store.measureRefreshAll()
+        guard let noteID = store.notes.first?.id else {
+            Issue.record("Missing seeded note")
+            return
+        }
+        let elapsedMS = try store.measureUpdateNote(
+            id: noteID,
+            content: "# Updated\n\nNew body for perf baseline."
+        )
+        #expect(elapsedMS < PerformanceBudgets.updateNote1kVaultMS)
+    }
+
+    @Test(.serialized) func phase0PersistPackageAt1kNotes() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 1_000, matchIndex: -1, matchContent: "")
+        try store.measureRefreshAll()
+        try store.attachToPackage(at: tempDir)
+
+        let elapsedMS = try store.measurePersistToPackage()
+        #expect(elapsedMS < PerformanceBudgets.persistPackage1kNotesMS)
+    }
+
+    @Test func phase0MarkdownParseUnderNFR01() async {
+        let actor = MarkdownParseActor()
+        let sample = String(repeating: "# Heading\nParagraph with **bold** and [[Link]].\n", count: 40)
+        let start = CFAbsoluteTimeGetCurrent()
+        let result = await actor.parse(text: sample)
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(!result.constructs.isEmpty)
+        #expect(elapsedMS < PerformanceBudgets.markdownParseMS)
+    }
+
+    @Test func phase0MarkdownStyleBaseline() {
+        let line = "# Heading\nParagraph with **bold** and `code`.\n"
+        let text = String(repeating: line, count: 80)
+        let storage = NSMutableAttributedString(string: text)
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let start = CFAbsoluteTimeGetCurrent()
+        MarkdownStyler.apply(
+            to: storage,
+            text: text,
+            caretLocation: 0,
+            constructs: constructs
+        )
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(elapsedMS < PerformanceBudgets.markdownStylePassMS)
+    }
+
+    @MainActor
+    @Test(.serialized) func phase0SyncRoundTripInMemory() async throws {
+        let store = VaultStore()
+        let transport = InMemorySyncTransport()
+        let coordinator = SyncCoordinator(store: store, transport: transport)
+        try await coordinator.enableSync()
+
+        let note = try store.createNote(title: "Sync perf", content: "Payload")
+        try store.persistToPackageIfNeeded()
+
+        let start = CFAbsoluteTimeGetCurrent()
+        await coordinator.syncNow()
+        let elapsedMS = (CFAbsoluteTimeGetCurrent() - start) * 1_000
+        #expect(elapsedMS < PerformanceBudgets.syncRoundTripInMemoryMS)
+        #expect(note.id.isEmpty == false)
+    }
+}
+
+// MARK: - Phase 1 optimization
+
+struct Phase1OptimizationTests {
+
+    @Test func phase1ListRowsExcludeFullBody() throws {
+        let store = VaultStore()
+        let longBody = String(repeating: "word ", count: 2_000)
+        let note = try store.createNote(title: "Big", content: longBody)
+
+        #expect(store.notes.count == 1)
+        #expect(store.notes[0].content.isEmpty)
+        #expect(store.noteSummaries[0].snippet.count <= 123)
+
+        let full = try store.fetchNote(id: note.id)
+        #expect(full?.content.count == longBody.count)
+    }
+
+    @Test func phase1TitleIndexResolvesWikiLinks() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Target Page")
+        #expect(store.noteID(forTitle: "target page") != nil)
+        #expect(store.noteID(forTitle: "missing") == nil)
+    }
+
+    @Test(.serialized) func phase1UpdateNoteAvoidsFullRefreshAll() throws {
+        let store = VaultStore()
+        try store.seedPerformanceNotes(count: 500, matchIndex: -1, matchContent: "")
+        try store.measureRefreshAll()
+        guard let noteID = store.notes.first?.id else {
+            Issue.record("Missing seeded note")
+            return
+        }
+
+        let beforeRevision = store.listRevision
+        let updateMS = try store.measureUpdateNote(id: noteID, content: "Incremental save body")
+        #expect(store.listRevision == beforeRevision + 1)
+        #expect(updateMS < PerformanceBudgets.updateNote1kVaultMS)
+    }
+
+    @Test func phase1CoalescedPersistDefersDiskWrite() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        _ = try store.createNote(title: "Deferred")
+        try store.attachToPackage(at: tempDir)
+
+        let dbURL = VaultPaths.databaseURL(in: tempDir)
+        let metaURL = VaultPaths.metaURL(in: tempDir)
+        let dbMtimeBefore = try FileManager.default.attributesOfItem(atPath: dbURL.path)[.modificationDate] as? Date
+        let metaMtimeBefore = try FileManager.default.attributesOfItem(atPath: metaURL.path)[.modificationDate] as? Date
+
+        store.markPackageDirty()
+        try await Task.sleep(for: .milliseconds(100))
+
+        let dbMtimeAfterDefer = try FileManager.default.attributesOfItem(atPath: dbURL.path)[.modificationDate] as? Date
+        let metaMtimeAfterDefer = try FileManager.default.attributesOfItem(atPath: metaURL.path)[.modificationDate] as? Date
+        #expect(dbMtimeAfterDefer == dbMtimeBefore)
+        #expect(metaMtimeAfterDefer == metaMtimeBefore)
+
+        try store.flushPackageIfNeeded()
+        let dbMtimeFlushed = try FileManager.default.attributesOfItem(atPath: dbURL.path)[.modificationDate] as? Date
+        let metaMtimeFlushed = try FileManager.default.attributesOfItem(atPath: metaURL.path)[.modificationDate] as? Date
+        #expect(dbMtimeFlushed != dbMtimeBefore || metaMtimeFlushed != metaMtimeBefore)
     }
 }

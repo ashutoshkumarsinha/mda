@@ -27,12 +27,38 @@ final class VaultStore {
     private var dbQueue: DatabaseQueue?
     private var packageURL: URL?
 
-    var notes: [Note] = []
+    var noteSummaries: [NoteListItem] = []
     var tagTree: [TagNode] = []
+
+    /// Bumps when list rows change (titles, pins, ordering).
+    private(set) var listRevision = 0
+    /// Bumps when wiki-link graph may have changed.
+    private(set) var linksRevision = 0
+    /// Bumps when a note body changes (editor reload from store).
+    private(set) var contentEpoch = 0
 
     var onNoteChanged: ((String) -> Void)?
 
+    var needsDatabaseRecovery = false
+    var autosaveErrorMessage: String?
+
     private var autosaveTask: Task<Void, Never>?
+    private var persistTask: Task<Void, Never>?
+    private var packageDirty = false
+    private var titleIndex: [String: String] = [:]
+
+    /// Test / legacy access — list metadata only; use `fetchNote(id:)` for body text.
+    var notes: [Note] {
+        noteSummaries.map {
+            Note(
+                id: $0.id,
+                title: $0.title,
+                content: "",
+                updatedAt: $0.updatedAt,
+                isPinned: $0.isPinned
+            )
+        }
+    }
 
     init(meta: VaultMeta = .makeNew()) {
         self.meta = meta
@@ -46,6 +72,7 @@ final class VaultStore {
 
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        packageURL = url
 
         let metaURL = VaultPaths.metaURL(in: url)
         let databaseURL = VaultPaths.databaseURL(in: url)
@@ -63,7 +90,16 @@ final class VaultStore {
         }
 
         if fileManager.fileExists(atPath: databaseURL.path) {
-            dbQueue = try DatabaseQueue(path: databaseURL.path)
+            do {
+                dbQueue = try Self.openValidatedDatabase(at: databaseURL)
+            } catch {
+                let backupURL = VaultPaths.backupDatabaseURL(in: url)
+                if fileManager.fileExists(atPath: backupURL.path) {
+                    needsDatabaseRecovery = true
+                    throw VaultError.databaseCorrupt(backupAvailable: true)
+                }
+                throw error
+            }
         } else if let existing = dbQueue {
             let exported = try Self.exportDatabase(from: existing)
             try exported.write(to: databaseURL, options: .atomic)
@@ -73,7 +109,30 @@ final class VaultStore {
         }
 
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
-        packageURL = url
+        needsDatabaseRecovery = false
+        try refreshAll()
+    }
+
+    func restoreDatabaseFromBackup() throws {
+        guard let packageURL else { throw VaultError.databaseUnavailable }
+
+        let databaseURL = VaultPaths.databaseURL(in: packageURL)
+        let backupURL = VaultPaths.backupDatabaseURL(in: packageURL)
+        let fileManager = FileManager.default
+
+        guard fileManager.fileExists(atPath: backupURL.path) else {
+            throw VaultError.databaseCorrupt(backupAvailable: false)
+        }
+
+        if fileManager.fileExists(atPath: databaseURL.path) {
+            try fileManager.removeItem(at: databaseURL)
+        }
+        try fileManager.copyItem(at: backupURL, to: databaseURL)
+
+        dbQueue = try Self.openValidatedDatabase(at: databaseURL)
+        try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
+        needsDatabaseRecovery = false
+        autosaveErrorMessage = nil
         try refreshAll()
     }
 
@@ -95,11 +154,36 @@ final class VaultStore {
     func persistToPackageIfNeeded() throws {
         guard let packageURL, let dbQueue else { return }
 
-        try meta.data().write(to: VaultPaths.metaURL(in: packageURL), options: .atomic)
+        try PerformanceSignpost.measure(.vaultPersistPackage) {
+            try meta.data().write(to: VaultPaths.metaURL(in: packageURL), options: .atomic)
 
-        let databaseURL = VaultPaths.databaseURL(in: packageURL)
-        let exported = try Self.exportDatabase(from: dbQueue)
-        try exported.write(to: databaseURL, options: .atomic)
+            let databaseURL = VaultPaths.databaseURL(in: packageURL)
+            let exported = try Self.exportDatabase(from: dbQueue)
+            try exported.write(to: databaseURL, options: .atomic)
+        }
+        packageDirty = false
+    }
+
+    func flushPackageIfNeeded() throws {
+        persistTask?.cancel()
+        guard packageDirty else { return }
+        try persistToPackageIfNeeded()
+    }
+
+    func markPackageDirty() {
+        packageDirty = true
+        schedulePersistToPackage()
+    }
+
+    func fetchNote(id: String) throws -> Note? {
+        guard let dbQueue else { return nil }
+        return try dbQueue.read { db in
+            try Note.filter(Note.Columns.id == id).fetchOne(db)
+        }
+    }
+
+    func noteSummary(id: String) -> NoteListItem? {
+        noteSummaries.first { $0.id == id }
     }
 
     // MARK: - Notes
@@ -110,7 +194,7 @@ final class VaultStore {
 
         var note = Note(title: title, content: content)
         if note.title.isEmpty {
-            note.title = TitleDeriver.derive(from: content, existingTitles: try allTitles())
+            note.title = TitleDeriver.derive(from: content, existingTitles: titleStrings())
         }
         try validateUniqueTitle(note.title, excludingNoteID: nil)
         note.checksum = SyncChecksum.compute(for: note)
@@ -120,13 +204,15 @@ final class VaultStore {
             try NoteIndexer.reindexTags(for: note.id, content: note.content, in: db)
             try LinkIndexer.reindexLinks(for: note.id, content: note.content, in: db)
         }
-        try refreshAll()
+        try applyNoteChanged(note, previousContent: nil)
         noteChanged(note.id)
         return note
     }
 
     func updateNote(id: String, content: String) throws -> Note {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
+
+        let previous = try fetchNote(id: id)
 
         var updated = try dbQueue.read { db in
             guard var note = try Note.filter(Note.Columns.id == id).fetchOne(db) else {
@@ -140,8 +226,11 @@ final class VaultStore {
         updated.clientUpdatedAt = Date()
         updated.version += 1
 
-        let titles = try allTitles(excludingNoteID: id)
-        updated.title = TitleDeriver.derive(from: content, existingTitles: titles, excludingNoteID: id)
+        updated.title = TitleDeriver.derive(
+            from: content,
+            existingTitles: titleStrings(excludingNoteID: id),
+            excludingNoteID: id
+        )
         try validateUniqueTitle(updated.title, excludingNoteID: id)
         updated.checksum = SyncChecksum.compute(for: updated)
 
@@ -150,7 +239,7 @@ final class VaultStore {
             try NoteIndexer.reindexTags(for: id, content: content, in: db)
             try LinkIndexer.reindexLinks(for: id, content: content, in: db)
         }
-        try refreshAll()
+        try applyNoteChanged(updated, previousContent: previous?.content)
         noteChanged(id)
         return updated
     }
@@ -162,10 +251,23 @@ final class VaultStore {
             guard !Task.isCancelled else { return }
             do {
                 _ = try updateNote(id: noteID, content: content)
-                try persistToPackageIfNeeded()
+                markPackageDirty()
+                autosaveErrorMessage = nil
             } catch {
-                // Surface via UI on next explicit action
+                autosaveErrorMessage = error.localizedDescription
             }
+        }
+    }
+
+    func saveNow(noteID: String, content: String) throws {
+        autosaveTask?.cancel()
+        do {
+            _ = try updateNote(id: noteID, content: content)
+            try flushPackageIfNeeded()
+            autosaveErrorMessage = nil
+        } catch {
+            autosaveErrorMessage = error.localizedDescription
+            throw error
         }
     }
 
@@ -190,7 +292,12 @@ final class VaultStore {
                 }
             }
         }
-        try refreshAll()
+        for id in ids {
+            try removeNoteFromCaches(id: id)
+        }
+        try reloadTagTree()
+        listRevision += 1
+        linksRevision += 1
         if notifySync {
             ids.forEach { noteChanged($0) }
         }
@@ -213,34 +320,32 @@ final class VaultStore {
                 try updated.update(db)
             }
         }
-        try refreshAll()
+        try removeNoteFromCaches(id: id)
+        try reloadTagTree()
+        listRevision += 1
+        linksRevision += 1
         if notifySync {
             noteChanged(id)
         }
     }
 
-    func notesFiltered(by tagPath: String?) throws -> [Note] {
+    func noteSummariesFiltered(by tagPath: String?) throws -> [NoteListItem] {
         guard let dbQueue else { return [] }
-
-        if let tagPath {
-            return try dbQueue.read { db in
-                try Note.fetchAll(db, sql: """
-                    SELECT DISTINCT n.*
-                    FROM note n
-                    JOIN note_tag nt ON nt.note_id = n.id
-                    JOIN tag t ON t.id = nt.tag_id
-                    WHERE n.is_deleted = 0
-                      AND (t.path = ? OR t.path LIKE ?)
-                    ORDER BY n.is_pinned DESC, n.updated_at DESC
-                """, arguments: [tagPath, "\(tagPath)/%"])
-            }
-        }
-
         return try dbQueue.read { db in
-            try Note
-                .filter(Note.Columns.isDeleted == false)
-                .order(Note.Columns.isPinned.desc, Note.Columns.updatedAt.desc)
-                .fetchAll(db)
+            try fetchNoteSummariesFiltered(by: tagPath, in: db)
+        }
+    }
+
+    /// Legacy API — returns lightweight rows only (empty `content`).
+    func notesFiltered(by tagPath: String?) throws -> [Note] {
+        try noteSummariesFiltered(by: tagPath).map {
+            Note(
+                id: $0.id,
+                title: $0.title,
+                content: "",
+                updatedAt: $0.updatedAt,
+                isPinned: $0.isPinned
+            )
         }
     }
 
@@ -280,32 +385,56 @@ final class VaultStore {
         return "Untitled"
     }
 
+    func noteDisplayTitle(_ item: NoteListItem) -> String {
+        item.displayTitle()
+    }
+
     func noteSnippet(_ note: Note, maxLength: Int = 120) -> String {
-        let text = note.content
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return "" }
-        if text.count <= maxLength { return text }
-        return String(text.prefix(maxLength)) + "..."
+        if !note.content.isEmpty {
+            return NoteListItem.makeSnippet(from: note.content, maxLength: maxLength)
+        }
+        if let item = noteSummary(id: note.id), !item.snippet.isEmpty {
+            return item.snippet
+        }
+        return ""
+    }
+
+    func noteSnippet(_ item: NoteListItem, maxLength: Int = 120) -> String {
+        guard !item.snippet.isEmpty else { return "" }
+        if item.snippet.count <= maxLength { return item.snippet }
+        return String(item.snippet.prefix(maxLength)) + "..."
     }
 
     func noteID(forTitle title: String) -> String? {
-        let lowered = title.lowercased()
-        return notes.first { $0.title.lowercased() == lowered }?.id
+        titleIndex[title.lowercased()]
     }
 
     func resolvedWikiLinkTitles(in content: String) -> Set<String> {
-        let existing = Set(notes.map { $0.title.lowercased() })
+        let existing = Set(titleIndex.keys)
         return Set(
             WikiLinkExtractor.extractTitles(from: content)
-                .filter { existing.contains($0.lowercased()) }
+                .map { $0.lowercased() }
+                .filter { existing.contains($0) }
         )
     }
 
-    func fetchBacklinks(for noteID: String, title: String) throws -> [Note] {
+    func fetchBacklinkSummaries(for noteID: String, title: String) throws -> [NoteListItem] {
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
-            try LinkIndexer.fetchBacklinks(for: noteID, title: title, in: db)
+            try Row.fetchAll(db, sql: """
+                \(Self.listItemSelectSQL)
+                FROM note n
+                JOIN note_link nl ON nl.source_id = n.id
+                WHERE (nl.target_id = ? OR LOWER(nl.target_title) = LOWER(?))
+                  AND n.is_deleted = 0
+                ORDER BY n.is_pinned DESC, n.updated_at DESC
+            """, arguments: [noteID, title]).map(Self.mapListItemRow)
+        }
+    }
+
+    func fetchBacklinks(for noteID: String, title: String) throws -> [Note] {
+        try fetchBacklinkSummaries(for: noteID, title: title).map {
+            Note(id: $0.id, title: $0.title, content: "", updatedAt: $0.updatedAt, isPinned: $0.isPinned)
         }
     }
 
@@ -325,7 +454,11 @@ final class VaultStore {
                 try note.update(db)
             }
         }
-        try refreshAll()
+        if let note = try fetchNote(id: id) {
+            let snippet = NoteListItem.makeSnippet(from: note.content)
+            insertSummarySorted(NoteListItem(note: note, snippet: snippet))
+            listRevision += 1
+        }
         noteChanged(id)
     }
 
@@ -356,7 +489,7 @@ final class VaultStore {
         primary.clientUpdatedAt = Date()
         primary.version += 1
 
-        let titles = try allTitles(excludingNoteID: primaryID)
+        let titles = titleStrings(excludingNoteID: primaryID)
         primary.title = TitleDeriver.derive(from: primary.content, existingTitles: titles, excludingNoteID: primaryID)
         try validateUniqueTitle(primary.title, excludingNoteID: primaryID)
         primary.checksum = SyncChecksum.compute(for: primary)
@@ -383,6 +516,8 @@ final class VaultStore {
         }
 
         try refreshAll()
+        listRevision += 1
+        linksRevision += 1
         noteChanged(primaryID)
         others.forEach { noteChanged($0.id) }
         return primary
@@ -392,12 +527,12 @@ final class VaultStore {
 
     func setSyncEnabled(_ enabled: Bool) throws {
         meta.syncEnabled = enabled
-        try persistToPackageIfNeeded()
+        markPackageDirty()
     }
 
     func updateLastSyncedAt(_ date: Date) throws {
         meta.lastSyncedAt = date
-        try persistToPackageIfNeeded()
+        markPackageDirty()
     }
 
     func enqueueSync(noteID: String) throws {
@@ -499,6 +634,8 @@ final class VaultStore {
             }
         }
         try refreshAll()
+        listRevision += 1
+        linksRevision += 1
         if notifySync {
             noteChanged(payload.noteID)
         }
@@ -520,6 +657,33 @@ final class VaultStore {
         }
     }
 
+    // MARK: - Performance measurement (Phase 0)
+
+    func measureRefreshAll() throws -> Double {
+        try PerformanceSignpost.elapsedMS { try refreshAll() }
+    }
+
+    func measureLoad1kNotesIntoCache() throws -> (refreshMS: Double, memoryDeltaMB: Double) {
+        let memoryBefore = ProcessMemory.residentMegabytes()
+        try seedPerformanceNotes(count: 1_000, matchIndex: -1, matchContent: "")
+        let refreshMS = try measureRefreshAll()
+        let memoryAfter = ProcessMemory.residentMegabytes()
+        return (refreshMS, max(0, memoryAfter - memoryBefore))
+    }
+
+    func measureUpdateNote(id: String, content: String) throws -> Double {
+        try PerformanceSignpost.elapsedMS {
+            _ = try updateNote(id: id, content: content)
+        }
+    }
+
+    func measurePersistToPackage() throws -> Double {
+        packageDirty = true
+        return try PerformanceSignpost.elapsedMS {
+            try flushPackageIfNeeded()
+        }
+    }
+
     // MARK: - Private
 
     private func noteChanged(_ noteID: String) {
@@ -530,9 +694,11 @@ final class VaultStore {
     }
 
     private func refreshAll() throws {
-        try reloadNotes()
-        try reloadTagTree()
-        try resolvePendingLinks()
+        try PerformanceSignpost.measure(.vaultRefreshAll) {
+            try PerformanceSignpost.measure(.vaultReloadNotes) { try reloadNotes() }
+            try PerformanceSignpost.measure(.vaultReloadTagTree) { try reloadTagTree() }
+            try PerformanceSignpost.measure(.vaultResolveLinks) { try resolvePendingLinks() }
+        }
     }
 
     private func resolvePendingLinks() throws {
@@ -544,16 +710,14 @@ final class VaultStore {
 
     private func reloadNotes() throws {
         guard let dbQueue else {
-            notes = []
+            noteSummaries = []
             return
         }
 
-        notes = try dbQueue.read { db in
-            try Note
-                .filter(Note.Columns.isDeleted == false)
-                .order(Note.Columns.isPinned.desc, Note.Columns.updatedAt.desc)
-                .fetchAll(db)
+        noteSummaries = try dbQueue.read { db in
+            try fetchAllNoteSummaries(in: db)
         }
+        rebuildTitleIndex()
     }
 
     private func reloadTagTree() throws {
@@ -566,28 +730,77 @@ final class VaultStore {
         }
     }
 
-    private func allTitles(excludingNoteID: String? = nil) throws -> [String] {
-        guard let dbQueue else { return [] }
-        return try dbQueue.read { db in
-            let notes = try Note.filter(Note.Columns.isDeleted == false).fetchAll(db)
-            return notes
-                .filter { $0.id != excludingNoteID }
-                .map(\.title)
-        }
+    private func titleStrings(excludingNoteID: String? = nil) -> [String] {
+        noteSummaries
+            .filter { $0.id != excludingNoteID }
+            .map(\.title)
     }
 
     private func validateUniqueTitle(_ title: String, excludingNoteID: String?) throws {
-        guard let dbQueue else { throw VaultError.databaseUnavailable }
         let lowered = title.lowercased()
-        let conflict = try dbQueue.read { db in
-            try Note
-                .filter(Note.Columns.isDeleted == false)
-                .filter(sql: "LOWER(title) = ?", arguments: [lowered])
-                .fetchAll(db)
-                .contains { $0.id != excludingNoteID }
-        }
-        if conflict {
+        if let existingID = titleIndex[lowered], existingID != excludingNoteID {
             throw VaultStoreError.duplicateTitle(title)
+        }
+    }
+
+    private func rebuildTitleIndex() {
+        var index: [String: String] = [:]
+        for item in noteSummaries {
+            let lowered = item.title.lowercased()
+            if !lowered.isEmpty {
+                index[lowered] = item.id
+            }
+        }
+        titleIndex = index
+    }
+
+    private func applyNoteChanged(_ note: Note, previousContent: String?) throws {
+        let snippet = NoteListItem.makeSnippet(from: note.content)
+        let item = NoteListItem(note: note, snippet: snippet)
+        insertSummarySorted(item)
+        rebuildTitleIndex()
+
+        let oldTags = Set(TagExtractor.extractPaths(from: previousContent ?? ""))
+        let newTags = Set(TagExtractor.extractPaths(from: note.content))
+        if oldTags != newTags {
+            try reloadTagTree()
+        }
+
+        let oldLinks = Set(WikiLinkExtractor.extractTitles(from: previousContent ?? ""))
+        let newLinks = Set(WikiLinkExtractor.extractTitles(from: note.content))
+        if oldLinks != newLinks {
+            linksRevision += 1
+        }
+
+        contentEpoch += 1
+        listRevision += 1
+    }
+
+    private func insertSummarySorted(_ item: NoteListItem) {
+        noteSummaries.removeAll { $0.id == item.id }
+        let insertIndex = noteSummaries.firstIndex { other in
+            if item.isPinned != other.isPinned { return !item.isPinned && other.isPinned }
+            return item.updatedAt < other.updatedAt
+        } ?? noteSummaries.count
+        noteSummaries.insert(item, at: insertIndex)
+    }
+
+    private func removeNoteFromCaches(id: String) throws {
+        if let item = noteSummaries.first(where: { $0.id == id }) {
+            let lowered = item.title.lowercased()
+            if titleIndex[lowered] == id {
+                titleIndex.removeValue(forKey: lowered)
+            }
+        }
+        noteSummaries.removeAll { $0.id == id }
+    }
+
+    private func schedulePersistToPackage() {
+        persistTask?.cancel()
+        persistTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, packageDirty else { return }
+            try? persistToPackageIfNeeded()
         }
     }
 
@@ -597,9 +810,34 @@ final class VaultStore {
             try DatabaseSchema.migrate(dbQueue!)
             try refreshAll()
         } catch {
-            notes = []
+            noteSummaries = []
             tagTree = []
+            titleIndex = [:]
         }
+    }
+
+    private static func openValidatedDatabase(at url: URL) throws -> DatabaseQueue {
+        let data = try Data(contentsOf: url)
+        guard data.count >= 16,
+              let header = String(data: data.prefix(16), encoding: .ascii),
+              header.hasPrefix("SQLite format 3") else {
+            throw VaultError.databaseCorrupt(backupAvailable: false)
+        }
+
+        let queue = try DatabaseQueue(path: url.path)
+        try queue.read { db in
+            let result = try String.fetchOne(db, sql: "PRAGMA integrity_check") ?? "failed"
+            guard result == "ok" else {
+                throw VaultError.databaseCorrupt(backupAvailable: false)
+            }
+            let noteTable = try String.fetchOne(db, sql: """
+                SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'note'
+            """)
+            guard noteTable == "note" else {
+                throw VaultError.databaseCorrupt(backupAvailable: false)
+            }
+        }
+        return queue
     }
 
     private static func ftsQuery(from userInput: String) -> String {
@@ -621,14 +859,16 @@ final class VaultStore {
     }
 
     private static func exportDatabase(from source: DatabaseQueue) throws -> Data {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("db")
-        defer { try? FileManager.default.removeItem(at: url) }
+        try PerformanceSignpost.measure(.vaultExportDatabase) {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("db")
+            defer { try? FileManager.default.removeItem(at: url) }
 
-        let destination = try DatabaseQueue(path: url.path)
-        try source.backup(to: destination)
-        try destination.close()
-        return try Data(contentsOf: url)
+            let destination = try DatabaseQueue(path: url.path)
+            try source.backup(to: destination)
+            try destination.close()
+            return try Data(contentsOf: url)
+        }
     }
 }

@@ -3,57 +3,80 @@
 //  MDE
 //
 
+import Foundation
+#if canImport(AppKit)
 import AppKit
-import Markdown
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 struct MarkdownStyleOptions {
     var baseFontSize: CGFloat = 15
     var reduceMotion: Bool = false
+    var suspendTokenHide: Bool = false
 
-    var tokenHiddenAlpha: CGFloat { reduceMotion ? 1.0 : 0.15 }
+    var tokenHiddenAlpha: CGFloat {
+        if suspendTokenHide { return 1.0 }
+        return reduceMotion ? 1.0 : 0.15
+    }
 }
 
 enum MarkdownStyler {
-    private static let accent = NSColor.linkColor
+    private static let accent = EditorPlatform.linkColor
 
     static func apply(
-        to textStorage: NSTextStorage,
+        to storage: NSMutableAttributedString,
         text: String,
         caretLocation: Int,
+        constructs: [MarkdownConstruct],
         options: MarkdownStyleOptions = MarkdownStyleOptions()
+    ) {
+        PerformanceSignpost.measure(.markdownStyle) {
+            applyStyling(
+                to: storage,
+                text: text,
+                caretLocation: caretLocation,
+                constructs: constructs,
+                options: options
+            )
+        }
+    }
+
+    private static func applyStyling(
+        to storage: NSMutableAttributedString,
+        text: String,
+        caretLocation: Int,
+        constructs: [MarkdownConstruct],
+        options: MarkdownStyleOptions
     ) {
         let length = (text as NSString).length
         guard length > 0 else { return }
 
-        let baseFont = NSFont.systemFont(ofSize: options.baseFontSize)
+        let baseFont = EditorPlatform.systemFont(ofSize: options.baseFontSize)
         let baseRange = NSRange(location: 0, length: length)
-        let constructs = MarkdownConstructScanner.constructs(in: text)
         let active = MarkdownConstructScanner.constructContaining(location: caretLocation, in: constructs)
 
-        textStorage.beginEditing()
-        textStorage.setAttributes([
+        storage.beginEditing()
+        storage.setAttributes([
             .font: baseFont,
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: EditorPlatform.labelColor,
         ], range: baseRange)
 
-        styleLines(in: text, storage: textStorage, options: options)
-        styleInline(in: text, storage: textStorage, options: options)
+        styleLines(in: text, storage: storage, options: options)
+        styleInline(in: text, storage: storage, options: options)
         applyHybridTokens(
             constructs: constructs,
             active: active,
-            storage: textStorage,
+            storage: storage,
             options: options
         )
-
-        _ = Document(parsing: text)
-
-        textStorage.endEditing()
+        storage.endEditing()
     }
 
     private static func applyHybridTokens(
         constructs: [MarkdownConstruct],
         active: MarkdownConstruct?,
-        storage: NSTextStorage,
+        storage: NSMutableAttributedString,
         options: MarkdownStyleOptions
     ) {
         let tokenHiddenAlpha = options.tokenHiddenAlpha
@@ -63,7 +86,11 @@ enum MarkdownStyler {
 
             for tokenRange in construct.tokenRanges {
                 let alpha: CGFloat = isActive ? 1.0 : tokenHiddenAlpha
-                storage.addAttribute(.foregroundColor, value: NSColor.labelColor.withAlphaComponent(alpha), range: tokenRange)
+                storage.addAttribute(
+                    .foregroundColor,
+                    value: EditorPlatform.labelColor.withAlphaComponent(alpha),
+                    range: tokenRange
+                )
             }
 
             switch construct.kind {
@@ -77,13 +104,17 @@ enum MarkdownStyler {
             case .tag:
                 if let contentRange = construct.contentRange {
                     let alpha: CGFloat = isActive ? 1.0 : 0.85
-                    storage.addAttribute(.foregroundColor, value: accent.withAlphaComponent(alpha), range: contentRange)
+                    storage.addAttribute(
+                        .foregroundColor,
+                        value: accent.withAlphaComponent(alpha),
+                        range: contentRange
+                    )
                 }
             case .task:
                 if let tokenRange = construct.tokenRanges.first {
                     storage.addAttribute(
                         .foregroundColor,
-                        value: NSColor.labelColor.withAlphaComponent(isActive ? 1.0 : tokenHiddenAlpha),
+                        value: EditorPlatform.labelColor.withAlphaComponent(isActive ? 1.0 : tokenHiddenAlpha),
                         range: tokenRange
                     )
                 }
@@ -93,7 +124,7 @@ enum MarkdownStyler {
         }
     }
 
-    private static func styleLines(in text: String, storage: NSTextStorage, options: MarkdownStyleOptions) {
+    private static func styleLines(in text: String, storage: NSMutableAttributedString, options: MarkdownStyleOptions) {
         let nsText = text as NSString
         var location = 0
         for line in text.components(separatedBy: "\n") {
@@ -104,7 +135,7 @@ enum MarkdownStyler {
                 let level = trimmed.prefix(while: { $0 == "#" }).count
                 let size = EditorTypography.headingSize(level: level, baseSize: options.baseFontSize)
                 storage.addAttributes([
-                    .font: NSFont.boldSystemFont(ofSize: size),
+                    .font: EditorPlatform.boldSystemFont(ofSize: size),
                 ], range: range)
             } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
                 storage.addAttributes([
@@ -117,22 +148,22 @@ enum MarkdownStyler {
         }
     }
 
-    private static func styleInline(in text: String, storage: NSTextStorage, options: MarkdownStyleOptions) {
+    private static func styleInline(in text: String, storage: NSMutableAttributedString, options: MarkdownStyleOptions) {
         let baseFontSize = options.baseFontSize
         applyPattern(#"\*\*([^*]+)\*\*"#, in: text, storage: storage) { range in
-            storage.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: baseFontSize), range: range)
+            storage.addAttribute(.font, value: EditorPlatform.boldSystemFont(ofSize: baseFontSize), range: range)
         }
         applyPattern(#"(?<!\*)\*([^*]+)\*(?!\*)"#, in: text, storage: storage) { range in
-            let italic = NSFontManager.shared.convert(
-                NSFont.systemFont(ofSize: baseFontSize),
-                toHaveTrait: .italicFontMask
+            storage.addAttribute(
+                .font,
+                value: EditorPlatform.italicSystemFont(ofSize: baseFontSize),
+                range: range
             )
-            storage.addAttribute(.font, value: italic, range: range)
         }
         applyPattern(#"`([^`]+)`"#, in: text, storage: storage) { range in
             storage.addAttribute(
                 .font,
-                value: NSFont.monospacedSystemFont(ofSize: baseFontSize - 1, weight: .regular),
+                value: EditorPlatform.monospacedSystemFont(ofSize: baseFontSize - 1),
                 range: range
             )
         }
@@ -141,7 +172,7 @@ enum MarkdownStyler {
     private static func applyPattern(
         _ pattern: String,
         in text: String,
-        storage: NSTextStorage,
+        storage: NSMutableAttributedString,
         apply: (NSRange) -> Void
     ) {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
@@ -159,3 +190,19 @@ enum MarkdownStyler {
         return style
     }
 }
+
+#if canImport(AppKit)
+import AppKit
+
+extension MarkdownStyler {
+    static func apply(
+        to textStorage: NSTextStorage,
+        text: String,
+        caretLocation: Int,
+        constructs: [MarkdownConstruct],
+        options: MarkdownStyleOptions = MarkdownStyleOptions()
+    ) {
+        apply(to: textStorage as NSMutableAttributedString, text: text, caretLocation: caretLocation, constructs: constructs, options: options)
+    }
+}
+#endif

@@ -8,6 +8,7 @@ Documentation for **MDE** — a local-first, minimalist note-taking app for macO
 |----------|--------------------------|
 | [**spec.md**](./spec.md) | Requirements, syntax rules, UX behavior, test scenarios, delivery phases |
 | [**hld.md**](./hld.md) | Architecture, data flows, database schema, SQL recipes, GUI wireframes |
+| [**optimization-plan.md**](./optimization-plan.md) | Performance phases, NFR budgets, signposts, Phase 0 baselines |
 
 ```
 spec.md  ──  WHAT   (requirements, syntax, tests, milestones)

@@ -39,9 +39,7 @@ actor CloudKitSyncTransport: SyncTransport {
             token = nil
         }
 
-        var fetched: [EncryptedSyncRecord] = []
-        var deleted: [String] = []
-        var newToken: CKServerChangeToken?
+        let results = FetchResultsBox()
 
         let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
         configuration.previousServerChangeToken = token
@@ -52,22 +50,22 @@ actor CloudKitSyncTransport: SyncTransport {
 
         operation.recordWasChangedBlock = { _, result in
             if case .success(let ckRecord) = result,
-               let encrypted = Self.encryptedRecord(from: ckRecord, vaultID: vaultID) {
-                fetched.append(encrypted)
+               let encrypted = CloudKitRecordParser.encryptedRecord(from: ckRecord, vaultID: vaultID) {
+                results.addRecord(encrypted)
             }
         }
 
         operation.recordWithIDWasDeletedBlock = { recordID, _ in
-            deleted.append(recordID.recordName)
+            results.addDeleted(recordID.recordName)
         }
 
         operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
-            newToken = token
+            results.setChangeToken(token)
         }
 
         operation.recordZoneFetchResultBlock = { _, result in
             if case .success(let zoneResult) = result {
-                newToken = zoneResult.serverChangeToken
+                results.setChangeToken(zoneResult.serverChangeToken)
             }
         }
 
@@ -84,7 +82,7 @@ actor CloudKitSyncTransport: SyncTransport {
         }
 
         let encodedToken: Data?
-        if let newToken {
+        if let newToken = results.changeToken {
             encodedToken = try NSKeyedArchiver.archivedData(
                 withRootObject: newToken,
                 requiringSecureCoding: true
@@ -93,7 +91,7 @@ actor CloudKitSyncTransport: SyncTransport {
             encodedToken = changeToken
         }
 
-        return SyncFetchResult(records: fetched, deletedNoteIDs: deleted, changeToken: encodedToken)
+        return SyncFetchResult(records: results.records, deletedNoteIDs: results.deletedNoteIDs, changeToken: encodedToken)
     }
 
     private func ensureZone(vaultID: String) async throws -> CKRecordZone.ID {
@@ -106,8 +104,10 @@ actor CloudKitSyncTransport: SyncTransport {
         preparedZones.insert(vaultID)
         return zoneID
     }
+}
 
-    private static func encryptedRecord(from record: CKRecord, vaultID: String) -> EncryptedSyncRecord? {
+private enum CloudKitRecordParser {
+    nonisolated static func encryptedRecord(from record: CKRecord, vaultID: String) -> EncryptedSyncRecord? {
         guard let ciphertext = record["ciphertext"] as? Data,
               let version = record["version"] as? Int,
               let clientUpdatedAt = record["clientUpdatedAt"] as? Date else {
@@ -122,5 +122,30 @@ actor CloudKitSyncTransport: SyncTransport {
             clientUpdatedAt: clientUpdatedAt,
             isDeleted: isDeleted
         )
+    }
+}
+
+private final class FetchResultsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var records: [EncryptedSyncRecord] = []
+    private(set) var deletedNoteIDs: [String] = []
+    private(set) var changeToken: CKServerChangeToken?
+
+    func addRecord(_ record: EncryptedSyncRecord) {
+        lock.lock()
+        records.append(record)
+        lock.unlock()
+    }
+
+    func addDeleted(_ noteID: String) {
+        lock.lock()
+        deletedNoteIDs.append(noteID)
+        lock.unlock()
+    }
+
+    func setChangeToken(_ token: CKServerChangeToken?) {
+        lock.lock()
+        changeToken = token
+        lock.unlock()
     }
 }

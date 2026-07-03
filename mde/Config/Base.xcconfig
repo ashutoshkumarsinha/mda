@@ -1,0 +1,2 @@
+// Shared build settings. Optional Local.xcconfig overrides DEVELOPMENT_TEAM.
+#include? "Local.xcconfig"

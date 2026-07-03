@@ -33,6 +33,9 @@ struct TagSidebarView: View {
         .listStyle(.sidebar)
         .navigationTitle("Tags")
         .accessibilityLabel(AccessibilityLabels.tagSidebar)
+        .accessibilityIdentifier("tag-sidebar")
+        #if os(macOS)
         .focusSection()
+        #endif
     }
 }
