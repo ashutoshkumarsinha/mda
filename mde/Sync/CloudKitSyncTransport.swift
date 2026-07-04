@@ -145,6 +145,14 @@ actor CloudKitSyncTransport: SyncTransport {
         preparedZones.insert(vaultID)
         return zoneID
     }
+
+    func fetchAsset(assetID: String, vaultID: String) async throws -> EncryptedAssetSyncRecord? {
+        let zoneID = try await ensureZone(vaultID: vaultID)
+        let recordID = CKRecord.ID(recordName: assetID, zoneID: zoneID)
+        let ckRecord = try await database.record(for: recordID)
+        guard ckRecord.recordType == "MDEAsset" else { return nil }
+        return CloudKitRecordParser.encryptedAssetRecord(from: ckRecord, vaultID: vaultID)
+    }
 }
 
 private enum CloudKitRecordParser {

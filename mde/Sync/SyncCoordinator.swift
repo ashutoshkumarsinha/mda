@@ -304,8 +304,40 @@ final class SyncCoordinator {
             }
         }
 
+        try await supplementMissingAssets(from: result.records, using: key)
+
         for deletedID in result.deletedNoteIDs {
             try store.softDeleteNote(id: deletedID, notifySync: false)
+        }
+    }
+
+    private func supplementMissingAssets(
+        from records: [EncryptedSyncRecord],
+        using key: SymmetricKey
+    ) async throws {
+        guard store.isPackageAttached else { return }
+
+        for encrypted in records {
+            let remote = try SyncEncryption.decrypt(encrypted.ciphertext, using: key)
+            guard !remote.isDeleted else { continue }
+
+            for assetID in store.missingReferencedAssetIDs(in: remote.content) {
+                guard let encryptedAsset = try await transport.fetchAsset(
+                    assetID: assetID,
+                    vaultID: store.meta.vaultID
+                ) else {
+                    continue
+                }
+                let (payload, data) = try SyncEncryption.decryptAsset(encryptedAsset.ciphertext, using: key)
+                guard payload.assetID == assetID,
+                      payload.contentChecksum == encryptedAsset.contentChecksum else {
+                    continue
+                }
+                if try store.assetSyncBaseChecksum(for: assetID) == payload.contentChecksum {
+                    continue
+                }
+                try store.applyRemoteAsset(payload, data: data)
+            }
         }
     }
 

@@ -70,6 +70,20 @@ extension VaultStore {
         }
     }
 
+    func fetchAsset(filename: String) throws -> VaultAsset? {
+        let dbQueue = try requireDatabaseQueue()
+        return try dbQueue.read { db in
+            try VaultAsset.filter(VaultAsset.Columns.filename == filename).fetchOne(db)
+        }
+    }
+
+    func assetFileExists(filename: String) -> Bool {
+        guard let packageURL = attachedPackageURL else { return false }
+        return FileManager.default.fileExists(
+            atPath: VaultPaths.assetFileURL(in: packageURL, filename: filename).path
+        )
+    }
+
     func assetsLinkedToNote(id: String) throws -> [VaultAsset] {
         let dbQueue = try requireDatabaseQueue()
         return try dbQueue.read { db in

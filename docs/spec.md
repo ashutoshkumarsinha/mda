@@ -55,7 +55,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 + v1.1 enhancements complete on macOS and iOS — hybrid editor (background parse, paste, IME, placeholder, inline code, fences, blockquotes), SQLCipher at-rest encryption, keyboard shortcuts, DB recovery (migration backup + autosave snapshot), wiki graph view, markdown import/export, multi-window macOS (`DocumentGroup`), cold-launch benchmark, **82+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team. All delivery phases (§13) and optimization phases ([optimization-plan](./optimization-plan.md)) are complete; open questions (§17) are resolved.
+**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **100+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
 
 ### Differentiation (v1)
 
@@ -103,12 +103,12 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 
 ### 4.2 v1 scope boundaries
 
-| In v1 | v1.1 *(shipped)* | v2+ |
-|-------|------------------|-----|
+| In v1 | v1.1 *(shipped)* | v2 *(shipped)* |
+|-------|------------------|----------------|
 | Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Package / zip export with `notes/`, `assets/`, `meta.json` ✅ |
-| Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Import Obsidian/Notion folders |
-| CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Images, tables, plugins |
-| Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | Plugin marketplace |
+| Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Obsidian folder import with embedded images ✅ |
+| CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Vault images, GFM tables, encrypted asset sync ✅ |
+| Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | — |
 
 ### 4.3 Non-goals
 
@@ -501,7 +501,7 @@ stateDiagram-v2
 
 **Exit:** All MUST FR/NFR · TC-001–TC-015 pass
 
-### v2 — Rich content & interoperability *(kickoff)*
+### v2 — Rich content & interoperability *(complete)*
 
 See [v2-roadmap.md](./v2-roadmap.md) for full phasing.
 
@@ -517,6 +517,19 @@ See [v2-roadmap.md](./v2-roadmap.md) for full phasing.
 
 - [x] Recursive import skipping `.obsidian`
 - [x] Rewrite embedded `![](relative)` images to vault assets
+
+#### v2.2 — GFM tables *(complete)*
+
+- [x] Pipe table parser + hybrid preview styling
+
+#### v2.3 — Export packaging *(complete)*
+
+- [x] Package / zip export: `notes/`, `assets/`, `meta.json`
+
+#### v2.4 — Asset sync *(complete)*
+
+- [x] Encrypted CloudKit asset blobs (`MDEAsset`)
+- [x] Pending asset queue + on-demand fetch for missing referenced assets
 
 ---
 
@@ -698,3 +711,4 @@ Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. v2.0�
 | 1.2 | 2026-07-02 | v1 gap closure: iOS target, UITextView editor, FR-E05/E08/E09/E10, shortcuts, DB recovery UI, app icon |
 | 1.3 | 2026-07-04 | v1.1 + hardening: SQLCipher, autosave snapshot recovery, inline code, graph/import/export, 82+ unit tests, all OQs closed, `meta.json` schema, GRDBCipher bootstrap |
 | 1.4 | 2026-07-04 | v2 kickoff: [v2-roadmap.md](./v2-roadmap.md), `vault_asset` schema, image import API |
+| 1.5 | 2026-07-04 | v2 complete: tables, export packaging, CloudKit asset sync, 100+ unit tests |

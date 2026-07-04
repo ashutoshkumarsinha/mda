@@ -796,6 +796,7 @@ final class VaultStore {
         try dbQueue.write { db in
             try SyncQueueStore.enqueue(noteID: noteID, vaultID: meta.vaultID, in: db)
         }
+        try enqueueAssetSyncForNoteReferences(noteID: noteID)
     }
 
     func pendingSyncCount() throws -> Int {

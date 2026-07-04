@@ -32,7 +32,7 @@ CI builds with `CODE_SIGNING_ALLOWED=NO` and do not need a team.
 
 ## Project status
 
-**v1 + v1.1 complete** — delivery phases 0–4 and optimization phases 0–7 implemented. **v2 kickoff** (vault image assets) is in progress — see [v2-roadmap.md](./v2-roadmap.md) and [spec §13](./spec.md#13-delivery-phases).
+**v1 + v1.1 + v2 complete** — see [v2-roadmap.md](./v2-roadmap.md) and [spec §13](./spec.md#13-delivery-phases).
 
 **First-time setup:** run `./scripts/setup-grdb-cipher.sh` (vendors GRDB into `Packages/GRDBCipher/` for SQLCipher).
 

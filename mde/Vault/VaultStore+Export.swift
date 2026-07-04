@@ -227,12 +227,3 @@ extension VaultStore {
         return collapsed.isEmpty ? "Untitled" : String(collapsed.prefix(80))
     }
 }
-
-private extension VaultStore {
-    func fetchAsset(filename: String) throws -> VaultAsset? {
-        let dbQueue = try requireDatabaseQueue()
-        return try dbQueue.read { db in
-            try VaultAsset.filter(VaultAsset.Columns.filename == filename).fetchOne(db)
-        }
-    }
-}

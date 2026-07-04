@@ -13,7 +13,7 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 |-------|------|
 | **Rich content** | Images and tables in notes; assets live in vault `assets/` |
 | **Interoperability** | Obsidian folder import with linked media; zip vault export |
-| **Sync (later)** | Asset blobs in CloudKit or CKAsset references — after local model is stable |
+| **Sync** | Encrypted asset blobs via CloudKit `MDEAsset` records ✅ |
 
 ---
 

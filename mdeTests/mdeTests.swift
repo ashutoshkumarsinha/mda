@@ -1848,4 +1848,98 @@ struct AssetSyncTests {
         #expect(decodedPayload.assetID == asset.id)
         #expect(decodedData == data)
     }
+
+    @Test func enqueueSyncQueuesReferencedAssets() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore(
+            meta: VaultMeta(formatVersion: 1, vaultID: UUID().uuidString, createdAt: Date(), syncEnabled: true),
+            databaseKeyStore: InMemoryVaultDatabaseKeyStore()
+        )
+        try store.attachToPackage(at: tempDir)
+
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("queue.png")
+        try makePNGBytes().write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let note = try store.createNote(title: "Queue", content: "")
+        let markdown = try store.importImage(from: imageURL, intoNoteID: note.id)
+        _ = try store.updateNote(id: note.id, content: markdown)
+        try store.dequeueAssetSync(assetID: try store.assetsLinkedToNote(id: note.id)[0].id)
+        try store.dequeueSync(noteID: note.id)
+
+        try store.enqueueSync(noteID: note.id)
+        #expect(try store.pendingAssetSyncCount() == 1)
+    }
+
+    @Test(.serialized) func fetchesMissingAssetAfterNotePull() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = "asset-missing-\(UUID().uuidString)"
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let meta = VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true)
+        let storeA = VaultStore(meta: meta, databaseKeyStore: InMemoryVaultDatabaseKeyStore())
+        let storeB = VaultStore(meta: meta, databaseKeyStore: InMemoryVaultDatabaseKeyStore())
+        try storeA.attachToPackage(at: tempDir)
+        try storeB.attachToPackage(at: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde"))
+
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("late.png")
+        try makePNGBytes().write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let note = try storeA.createNote(title: "Late Asset", content: "")
+        let markdown = try storeA.importImage(from: imageURL, intoNoteID: note.id)
+        _ = try storeA.updateNote(id: note.id, content: markdown)
+        let payload = try #require(try storeA.syncPayload(for: note.id))
+        let assetPayloads = try storeA.pendingAssetSyncPayloads()
+        let (assetPayload, assetData) = assetPayloads[0]
+
+        let noteCiphertext = try SyncEncryption.encrypt(payload: payload, using: key)
+        try await transport.upload(
+            EncryptedSyncRecord(
+                noteID: payload.noteID,
+                vaultID: vaultID,
+                ciphertext: noteCiphertext,
+                version: payload.version,
+                clientUpdatedAt: payload.clientUpdatedAt,
+                isDeleted: false
+            ),
+            vaultID: vaultID
+        )
+
+        let assetCiphertext = try SyncEncryption.encrypt(payload: assetPayload, data: assetData, using: key)
+        try await transport.uploadAsset(
+            EncryptedAssetSyncRecord(
+                assetID: assetPayload.assetID,
+                vaultID: vaultID,
+                ciphertext: assetCiphertext,
+                filename: assetPayload.filename,
+                mimeType: assetPayload.mimeType,
+                byteSize: assetPayload.byteSize,
+                contentChecksum: assetPayload.contentChecksum
+            ),
+            vaultID: vaultID
+        )
+        transport.omitAssetsFromFetch = true
+
+        let coordinatorB = SyncCoordinator(store: storeB, transport: transport, keyStore: keyStore)
+        try await coordinatorB.enableSync()
+        await coordinatorB.syncNow(forceFull: true)
+
+        let assetFilename = MarkdownImageExtractor.references(in: markdown)[0].assetFilename
+        let assetFile = VaultPaths.assetFileURL(in: storeB.attachedPackageURL!, filename: assetFilename)
+        #expect(FileManager.default.fileExists(atPath: assetFile.path))
+    }
 }

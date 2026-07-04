@@ -15,6 +15,28 @@ extension VaultStore {
         }
     }
 
+    /// Enqueues upload for every vault asset referenced in a note's markdown.
+    func enqueueAssetSyncForNoteReferences(noteID: String) throws {
+        guard meta.syncEnabled,
+              let note = try fetchNote(id: noteID) else { return }
+
+        var enqueued = Set<String>()
+        for reference in MarkdownImageExtractor.references(in: note.content) {
+            if let asset = try fetchAsset(filename: reference.assetFilename),
+               enqueued.insert(asset.id).inserted {
+                try enqueueAssetSync(assetID: asset.id)
+            }
+        }
+    }
+
+    /// Asset IDs referenced in content whose files are not present locally.
+    func missingReferencedAssetIDs(in content: String) -> [String] {
+        MarkdownImageExtractor.references(in: content).compactMap { reference in
+            guard !assetFileExists(filename: reference.assetFilename) else { return nil }
+            return (reference.assetFilename as NSString).deletingPathExtension
+        }
+    }
+
     func dequeueAssetSync(assetID: String) throws {
         let dbQueue = try requireDatabaseQueue()
         try dbQueue.write { db in

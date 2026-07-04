@@ -9,6 +9,7 @@ protocol SyncTransport: Sendable {
     func upload(_ record: EncryptedSyncRecord, vaultID: String) async throws
     func uploadAsset(_ record: EncryptedAssetSyncRecord, vaultID: String) async throws
     func fetchRemote(vaultID: String, since changeToken: Data?) async throws -> SyncFetchResult
+    func fetchAsset(assetID: String, vaultID: String) async throws -> EncryptedAssetSyncRecord?
 }
 
 final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
@@ -19,6 +20,8 @@ final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
     private(set) var assetUploadCount = 0
     private(set) var fetchCount = 0
     var isOffline = false
+    /// When true, `fetchRemote` omits assets (simulates incremental note-only pull).
+    var omitAssetsFromFetch = false
 
     func upload(_ record: EncryptedSyncRecord, vaultID: String) async throws {
         if isOffline { throw SyncError.transportUnavailable }
@@ -42,7 +45,7 @@ final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
         fetchCount += 1
         defer { lock.unlock() }
         let vaultRecords = records[vaultID] ?? [:]
-        let vaultAssets = assetRecords[vaultID] ?? [:]
+        let vaultAssets = omitAssetsFromFetch ? [:] : (assetRecords[vaultID] ?? [:])
         return SyncFetchResult(
             records: Array(vaultRecords.values),
             assetRecords: Array(vaultAssets.values),
@@ -62,5 +65,12 @@ final class InMemorySyncTransport: SyncTransport, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return Array(assetRecords[vaultID]?.values ?? [:].values)
+    }
+
+    func fetchAsset(assetID: String, vaultID: String) async throws -> EncryptedAssetSyncRecord? {
+        if isOffline { throw SyncError.transportUnavailable }
+        lock.lock()
+        defer { lock.unlock() }
+        return assetRecords[vaultID]?[assetID]
     }
 }
