@@ -164,6 +164,13 @@ enum MarkdownStyler {
                         .paragraphStyle: blockquoteParagraphStyle(),
                     ], range: contentRange)
                 }
+            case .image:
+                if let contentRange = construct.contentRange {
+                    storage.addAttributes([
+                        .foregroundColor: accent,
+                        .font: EditorPlatform.italicSystemFont(ofSize: options.baseFontSize - 1),
+                    ], range: contentRange)
+                }
             default:
                 break
             }

@@ -30,6 +30,14 @@ final class VaultStore {
     private var dbQueue: DatabaseQueue?
     private var packageURL: URL?
 
+    /// Package URL when vault is bound to an on-disk `.mde` document.
+    var attachedPackageURL: URL? { packageURL }
+
+    func requireDatabaseQueue() throws -> DatabaseQueue {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        return dbQueue
+    }
+
     let listState = VaultListState()
     let editorState = VaultEditorState()
 

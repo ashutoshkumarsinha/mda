@@ -16,6 +16,7 @@ struct MarkdownConstruct {
         case codeFence
         case codeBlockLine
         case inlineCode
+        case image
     }
 
     var kind: Kind
@@ -102,6 +103,7 @@ enum MarkdownConstructScanner {
         result.append(contentsOf: wikiLinkConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: boldConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: tagConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: imageConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: inlineCodes)
         return result
     }
@@ -163,6 +165,22 @@ enum MarkdownConstructScanner {
 
     private static func ranges(_ ranges: [NSRange], contain target: NSRange) -> Bool {
         ranges.contains { NSIntersectionRange($0, target).length > 0 }
+    }
+
+    private static func imageConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
+        MarkdownImageExtractor.references(in: text).compactMap { ref in
+            guard !ranges(excluding, contain: ref.fullRange) else { return nil }
+            let openToken = NSRange(location: ref.fullRange.location, length: 2)
+            let closeBracket = NSRange(location: ref.altRange.upperBound, length: 1)
+            let openParen = NSRange(location: ref.pathRange.location - 1, length: 1)
+            let closeParen = NSRange(location: ref.pathRange.upperBound, length: 1)
+            return MarkdownConstruct(
+                kind: .image,
+                fullRange: ref.fullRange,
+                tokenRanges: [openToken, closeBracket, openParen, closeParen],
+                contentRange: ref.pathRange
+            )
+        }
     }
 
     private static func wikiLinkConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {

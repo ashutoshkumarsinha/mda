@@ -27,6 +27,8 @@ struct DatabaseSchemaTests {
             #expect(tables.contains("note_link"))
             #expect(tables.contains("sync_queue"))
             #expect(tables.contains("note_sync_base"))
+            #expect(tables.contains("vault_asset"))
+            #expect(tables.contains("note_asset"))
 
             let ftsTables = try String.fetchAll(db, sql: """
                 SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'note_fts'
@@ -1457,5 +1459,79 @@ struct CompletionTests {
             actual: elapsedMS,
             budget: 50
         ))
+    }
+}
+
+// MARK: - v2 vault assets
+
+struct VaultAssetTests {
+
+    @Test func parsesVaultRelativeImagePaths() {
+        #expect(VaultAssetStore.parseVaultAssetPath("assets/abc.png") == "abc.png")
+        #expect(VaultAssetStore.parseVaultAssetPath("../secrets.png") == nil)
+        #expect(VaultAssetStore.parseVaultAssetPath("/absolute.png") == nil)
+    }
+
+    @Test func markdownImageExtractorFindsAssetReferences() {
+        let text = "See ![Chart](assets/abc-123.png) below."
+        let refs = MarkdownImageExtractor.references(in: text)
+        #expect(refs.count == 1)
+        #expect(refs[0].assetFilename == "abc-123.png")
+        #expect(refs[0].alt == "Chart")
+    }
+
+    @Test func imageConstructRecognizedInScanner() {
+        let text = "![Logo](assets/id.jpg)"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        #expect(constructs.contains { $0.kind == .image })
+    }
+
+    @Test func importsImageIntoPackageVault() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let pngBytes = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        ])
+        let sourceImage = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: sourceImage) }
+        try pngBytes.write(to: sourceImage)
+
+        let store = VaultStore()
+        let note = try store.createNote(title: "Image note", content: "Before")
+        try store.attachToPackage(at: tempDir)
+
+        let markdown = try store.importImage(from: sourceImage, intoNoteID: note.id, altText: "Icon")
+        #expect(markdown.hasPrefix("![Icon](assets/"))
+        #expect(markdown.hasSuffix(".png)"))
+
+        let assetPath = markdown
+            .replacingOccurrences(of: "![Icon](assets/", with: "")
+            .replacingOccurrences(of: ")", with: "")
+        let assetFile = VaultPaths.assetFileURL(in: tempDir, filename: assetPath)
+        #expect(FileManager.default.fileExists(atPath: assetFile.path))
+
+        let linked = try store.assetsLinkedToNote(id: note.id)
+        #expect(linked.count == 1)
+        #expect(linked[0].filename == assetPath)
+
+        let resolved = store.assetURL(forMarkdownPath: "assets/\(assetPath)")
+        #expect(resolved == assetFile)
+    }
+
+    @Test func rejectsImageImportWithoutPackage() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Loose", content: "")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("x.png")
+        do {
+            _ = try store.importImage(from: url, intoNoteID: note.id)
+            Issue.record("Expected packageNotAttached")
+        } catch VaultAssetError.packageNotAttached {
+            #expect(Bool(true))
+        }
     }
 }

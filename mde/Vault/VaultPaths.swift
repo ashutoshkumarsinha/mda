@@ -23,6 +23,10 @@ enum VaultPaths {
         packageURL.appendingPathComponent(assetsDirectoryName, isDirectory: true)
     }
 
+    static func assetFileURL(in packageURL: URL, filename: String) -> URL {
+        assetsURL(in: packageURL).appendingPathComponent(filename, isDirectory: false)
+    }
+
     static func backupDatabaseURL(in packageURL: URL) -> URL {
         packageURL.appendingPathComponent("notes.backup.db", isDirectory: false)
     }

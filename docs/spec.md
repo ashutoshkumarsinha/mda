@@ -25,8 +25,9 @@
 15. [Test scenarios](#15-test-scenarios)
 16. [Dependencies](#16-dependencies)
 17. [Open questions](#17-open-questions)
-18. [Glossary](#18-glossary)
-19. [Revision history](#19-revision-history)
+18. [v2 roadmap](#v2-roadmap)
+19. [Glossary](#19-glossary)
+20. [Revision history](#20-revision-history)
 
 ---
 
@@ -133,7 +134,7 @@ Formal rules for the parser, indexer, and editor. Implementation uses `swift-mar
 | Inline code | `` `code` `` | SHOULD ✅ | Monospace; **backtick tokens always visible** (no hybrid hide) |
 | Code fence | ` ``` ` | v1.1 ✅ | Monospace block; fence tokens hybrid |
 | Blockquote | `>` | v1.1 ✅ | Muted text + indent |
-| Image / table / HTML | — | v2 | Non-goal v1 |
+| Image / table / HTML | — | v2 *(images: foundation ✅)* | Images: `assets/` + `![alt](assets/…)`; tables planned v2.2 |
 
 ### 5.2 WikiLinks
 
@@ -185,7 +186,7 @@ MyVault.mde/
 ├── notes.db        # GRDB SQLite (SQLCipher when database_encrypted)
 ├── notes.backup.db # pre-migration copy (recovery)
 ├── notes.autosave.db # last flush snapshot (FR-D04 recovery)
-└── assets/         # reserved for v2 images
+└── assets/         # v2 images: `{uuid}.{ext}` binaries
 ```
 
 | Field | Value |
@@ -500,6 +501,21 @@ stateDiagram-v2
 
 **Exit:** All MUST FR/NFR · TC-001–TC-015 pass
 
+### v2 — Rich content & interoperability *(kickoff)*
+
+See [v2-roadmap.md](./v2-roadmap.md) for full phasing.
+
+#### v2.0 — Vault assets foundation *(in progress)*
+
+- [x] `vault_asset` + `note_asset` schema (`v3_vault_assets`)
+- [x] `VaultAssetStore` — files under `assets/`
+- [x] `![alt](assets/<id>.<ext>)` markdown convention
+- [x] `importImage(intoNoteID:)` API + construct parsing
+- [ ] Editor image picker + inline rendering (`NSTextAttachment`)
+- [ ] Asset sync (CloudKit)
+
+**Exit:** Image in package vault round-trips on disk; tests pass.
+
 ---
 
 ## 14. Traceability matrix
@@ -648,7 +664,13 @@ All open questions are **resolved** for v1/v1.1.
 
 ---
 
-## 18. Glossary
+## v2 roadmap
+
+Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. Kickoff (v2.0) adds vault-local image assets; tables, Obsidian media import, zip export, and asset sync follow in v2.1–v2.4.
+
+---
+
+## 19. Glossary
 
 | Term | Definition |
 |------|------------|
@@ -660,9 +682,11 @@ All open questions are **resolved** for v1/v1.1.
 | **Subtree filter** | Parent tag includes all child tag paths |
 | **CRDT** | Conflict-free merge structure for sync |
 
+| **Vault asset** | Binary file in `assets/` referenced by `![alt](assets/…)` in note content |
+
 ---
 
-## 19. Revision history
+## 20. Revision history
 
 | Version | Date | Changes |
 |---------|------|---------|
@@ -671,3 +695,4 @@ All open questions are **resolved** for v1/v1.1.
 | 1.1 | 2026-07-02 | Phase 1 implemented: markdown editor, tags, FTS search, three-column macOS UI |
 | 1.2 | 2026-07-02 | v1 gap closure: iOS target, UITextView editor, FR-E05/E08/E09/E10, shortcuts, DB recovery UI, app icon |
 | 1.3 | 2026-07-04 | v1.1 + hardening: SQLCipher, autosave snapshot recovery, inline code, graph/import/export, 82+ unit tests, all OQs closed, `meta.json` schema, GRDBCipher bootstrap |
+| 1.4 | 2026-07-04 | v2 kickoff: [v2-roadmap.md](./v2-roadmap.md), `vault_asset` schema, image import API |

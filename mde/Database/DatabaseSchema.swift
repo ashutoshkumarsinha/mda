@@ -112,10 +112,35 @@ enum DatabaseSchema {
             )
         }
 
+        migrator.registerMigration("v3_vault_assets") { db in
+            try db.create(table: "vault_asset") { t in
+                t.column("id", .text).primaryKey()
+                t.column("filename", .text).notNull()
+                t.column("mime_type", .text).notNull()
+                t.column("byte_size", .integer).notNull()
+                t.column("created_at", .datetime).notNull()
+            }
+            try db.create(index: "idx_vault_asset_filename", on: "vault_asset", columns: ["filename"])
+
+            try db.execute(sql: """
+            CREATE TABLE note_asset (
+                note_id TEXT NOT NULL REFERENCES note(id) ON DELETE CASCADE,
+                asset_id TEXT NOT NULL REFERENCES vault_asset(id) ON DELETE CASCADE,
+                alt_text TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (note_id, asset_id)
+            );
+            """)
+            try db.create(index: "idx_note_asset_asset_id", on: "note_asset", columns: ["asset_id"])
+        }
+
         return migrator
     }
 
-    private static let migrationIdentifiers = ["v1_initial_schema", "v2_list_query_index"]
+    private static let migrationIdentifiers = [
+        "v1_initial_schema",
+        "v2_list_query_index",
+        "v3_vault_assets",
+    ]
 
     static func migrate(_ dbQueue: DatabaseQueue, databaseURL: URL? = nil) throws {
         if let databaseURL {
