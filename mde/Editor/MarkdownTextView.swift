@@ -23,6 +23,7 @@ struct MarkdownTextView: NSViewRepresentable {
     var baseFontSize: CGFloat
     var reduceMotion: Bool
     var noteTitle: String
+    var imageURLForPath: (String) -> URL?
     var onTextChange: (String) -> Void
     var onWikiLinkClick: (String) -> Void
 
@@ -77,13 +78,14 @@ struct MarkdownTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
+        context.coordinator.imageURLForPath = imageURLForPath
         context.coordinator.styleController.styleOptions = styleOptions
         if let tokenStorage = textView.textStorage as? MarkdownTokenTextStorage {
             tokenStorage.styleOptions = styleOptions
         }
         textView.font = .systemFont(ofSize: baseFontSize)
         configureAccessibility(on: textView)
-        if textView.string != text {
+        if MarkdownImageSerialization.plaintext(from: textView.textStorage ?? NSAttributedString()) != text {
             let selected = textView.selectedRanges
             textView.string = text
             textView.selectedRanges = selected
@@ -97,12 +99,17 @@ struct MarkdownTextView: NSViewRepresentable {
             resolvedLinkTitles: resolvedLinkTitles,
             styleOptions: styleOptions,
             onTextChange: onTextChange,
-            onWikiLinkClick: onWikiLinkClick
+            onWikiLinkClick: onWikiLinkClick,
+            imageURLForPath: imageURLForPath
         )
     }
 
     private var styleOptions: MarkdownStyleOptions {
-        MarkdownStyleOptions(baseFontSize: baseFontSize, reduceMotion: reduceMotion)
+        MarkdownStyleOptions(
+            baseFontSize: baseFontSize,
+            reduceMotion: reduceMotion,
+            imageURLForPath: imageURLForPath
+        )
     }
 
     private func configureAccessibility(on textView: NSTextView) {
@@ -116,6 +123,7 @@ struct MarkdownTextView: NSViewRepresentable {
         @Binding var text: String
         var resolvedLinkTitles: Set<String>
         let styleController = MarkdownEditorStyleController()
+        var imageURLForPath: (String) -> URL?
         var onTextChange: (String) -> Void
         var onWikiLinkClick: (String) -> Void
         weak var textView: NSTextView?
@@ -125,10 +133,12 @@ struct MarkdownTextView: NSViewRepresentable {
             resolvedLinkTitles: Set<String>,
             styleOptions: MarkdownStyleOptions,
             onTextChange: @escaping (String) -> Void,
-            onWikiLinkClick: @escaping (String) -> Void
+            onWikiLinkClick: @escaping (String) -> Void,
+            imageURLForPath: @escaping (String) -> URL?
         ) {
             _text = text
             self.resolvedLinkTitles = resolvedLinkTitles
+            self.imageURLForPath = imageURLForPath
             self.onTextChange = onTextChange
             self.onWikiLinkClick = onWikiLinkClick
             super.init()
@@ -136,8 +146,9 @@ struct MarkdownTextView: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView, !styleController.isStyleApplicationInProgress else { return }
-            let updated = textView.string
+            guard let textView, let storage = textView.textStorage,
+                  !styleController.isStyleApplicationInProgress else { return }
+            let updated = MarkdownImageSerialization.plaintext(from: storage)
             text = updated
             onTextChange(updated)
             scheduleStyleApply()
@@ -178,7 +189,7 @@ struct MarkdownTextView: NSViewRepresentable {
             if fullDocument, constructs == nil, styleController.cachedConstructs.isEmpty {
                 Task {
                     await styleController.parseAndApply(
-                        text: textView.string,
+                        text: text,
                         caretLocation: textView.selectedRange().location,
                         fullDocument: true
                     ) { parsed, _ in
@@ -192,18 +203,25 @@ struct MarkdownTextView: NSViewRepresentable {
             defer { styleController.noteStyleApplicationEnded() }
 
             let caret = textView.selectedRange().location
-            let content = textView.string
+            let markdown = text
+            if MarkdownImageSerialization.plaintext(from: storage) != markdown {
+                let selected = textView.selectedRange()
+                storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: markdown)
+                textView.setSelectedRange(selected)
+            }
+
             var options = styleController.styleOptions
+            options.imageURLForPath = imageURLForPath
             options.suspendTokenHide = textView.hasMarkedText()
 
             let activeConstructs = constructs ?? styleController.cachedConstructs
             let range = fullDocument
                 ? nil
-                : (styleRange ?? MarkdownLineIndex.stylingNeighborhood(in: content, caretLocation: caret))
+                : (styleRange ?? MarkdownLineIndex.stylingNeighborhood(in: markdown, caretLocation: caret))
 
             MarkdownStyler.apply(
                 to: storage,
-                text: content,
+                text: markdown,
                 caretLocation: caret,
                 constructs: activeConstructs,
                 options: options,
@@ -214,7 +232,7 @@ struct MarkdownTextView: NSViewRepresentable {
         private func scheduleStyleApply() {
             guard let textView else { return }
             let caret = textView.selectedRange().location
-            let content = textView.string
+            let content = text
 
             styleController.scheduleStyleApply(text: content, caretLocation: caret) { constructs, styleRange in
                 self.applyStyles(constructs: constructs, styleRange: styleRange)

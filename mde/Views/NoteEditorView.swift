@@ -25,6 +25,7 @@ struct NoteEditorView: View {
     @State private var pendingWikiLinkTitle: String?
     @State private var showCreateWikiLinkSheet = false
     @State private var showExportPicker = false
+    @State private var showImageImporter = false
     @State private var exportDocument = MarkdownExportDocument()
     @State private var editorSummary: NoteListItem?
     @State private var isTrashedNote = false
@@ -139,6 +140,7 @@ struct NoteEditorView: View {
                         baseFontSize: EditorTypography.baseFontSize(for: dynamicTypeSize),
                         reduceMotion: reduceMotion,
                         noteTitle: store.noteDisplayTitle(summary),
+                        imageURLForPath: { path in store.assetURL(forMarkdownPath: path) },
                         onTextChange: { updated in
                             guard !isTrashedNote else { return }
                             store.scheduleAutosave(noteID: activeNoteID, content: updated)
@@ -155,6 +157,16 @@ struct NoteEditorView: View {
                 .toolbar {
                     ToolbarItem {
                         Button {
+                            showImageImporter = true
+                        } label: {
+                            Label("Insert Image", systemImage: "photo")
+                        }
+                        .disabled(isTrashedNote || !store.isPackageAttached)
+                        .accessibilityLabel(AccessibilityLabels.insertImage)
+                        .help(store.isPackageAttached ? "Insert image from file" : "Save vault to disk before adding images")
+                    }
+                    ToolbarItem {
+                        Button {
                             prepareExport(noteID: activeNoteID)
                         } label: {
                             Label("Export", systemImage: "square.and.arrow.up")
@@ -162,6 +174,13 @@ struct NoteEditorView: View {
                         .accessibilityLabel(AccessibilityLabels.exportNote)
                         .help("Export note as Markdown")
                     }
+                }
+                .fileImporter(
+                    isPresented: $showImageImporter,
+                    allowedContentTypes: [.image, .png, .jpeg],
+                    allowsMultipleSelection: false
+                ) { result in
+                    importImage(result, noteID: activeNoteID)
                 }
                 .onChange(of: editorState.contentEpoch) { _, _ in
                     syncEditorFromStore(noteID: activeNoteID)
@@ -308,6 +327,28 @@ struct NoteEditorView: View {
             let markdown = try store.exportNoteAsMarkdown(id: noteID)
             exportDocument = MarkdownExportDocument(text: markdown)
             showExportPicker = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func importImage(_ result: Result<[URL], Error>, noteID: String) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        do {
+            let alt = url.deletingPathExtension().lastPathComponent
+            let markdown = try store.importImage(from: url, intoNoteID: noteID, altText: alt)
+            let separator: String
+            if editorText.isEmpty {
+                separator = ""
+            } else if editorText.hasSuffix("\n\n") {
+                separator = ""
+            } else if editorText.hasSuffix("\n") {
+                separator = "\n"
+            } else {
+                separator = "\n\n"
+            }
+            editorText += separator + markdown
+            store.scheduleAutosave(noteID: noteID, content: editorText)
         } catch {
             errorMessage = error.localizedDescription
         }

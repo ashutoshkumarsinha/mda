@@ -103,7 +103,7 @@ struct ContentView: View {
                     Button {
                         showMarkdownImport = true
                     } label: {
-                        Label("Import Markdown…", systemImage: "square.and.arrow.down")
+                        Label("Import Markdown / Obsidian…", systemImage: "square.and.arrow.down")
                     }
                 } label: {
                     Label("Vault", systemImage: "archivebox")
@@ -420,7 +420,13 @@ struct ContentView: View {
                     let accessed = url.startAccessingSecurityScopedResource()
                     defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                     if url.hasDirectoryPath {
-                        _ = try store.importMarkdownDirectory(from: url)
+                        var isDirectory: ObjCBool = false
+                        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                           isDirectory.boolValue {
+                            _ = try store.importObsidianDirectory(from: url)
+                        } else {
+                            _ = try store.importMarkdownDirectory(from: url)
+                        }
                     } else {
                         _ = try store.importMarkdownFile(from: url)
                     }

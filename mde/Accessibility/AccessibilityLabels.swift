@@ -11,6 +11,7 @@ enum AccessibilityLabels {
     static let trashList = "Trash"
     static let noteEditor = "Note editor"
     static let exportNote = "Export note as Markdown"
+    static let insertImage = "Insert image into note"
     static let emptyTrash = "Empty trash permanently"
     static let backlinksPanel = "Backlinks panel"
     static let emptyBacklinks = "No notes link here yet"

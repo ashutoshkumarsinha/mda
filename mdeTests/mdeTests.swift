@@ -7,6 +7,9 @@ import Foundation
 import GRDB
 import SwiftUI
 import Testing
+#if os(macOS)
+import AppKit
+#endif
 @testable import mde
 
 struct DatabaseSchemaTests {
@@ -1533,5 +1536,55 @@ struct VaultAssetTests {
         } catch VaultAssetError.packageNotAttached {
             #expect(Bool(true))
         }
+    }
+
+    @Test func rewritesEmbeddedImagesOnMarkdownImport() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sourceDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sourceDir) }
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+
+        let pngBytes = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        ])
+        let imageURL = sourceDir.appendingPathComponent("diagram.png")
+        try pngBytes.write(to: imageURL)
+        let mdURL = sourceDir.appendingPathComponent("Note.md")
+        try "![Diagram](./diagram.png)\n".write(to: mdURL, atomically: true, encoding: .utf8)
+
+        let store = VaultStore()
+        try store.attachToPackage(at: tempDir)
+        let note = try store.importMarkdownFile(from: mdURL)
+
+        #expect(note.content.contains("![Diagram](assets/"))
+        #expect(note.content.contains(".png)"))
+        #expect(try store.assetsLinkedToNote(id: note.id).count == 1)
+    }
+
+    #if os(macOS)
+    @Test func markdownImageSerializationRoundTrips() {
+        let attachment = NSTextAttachment()
+        attachment.image = NSImage(size: NSSize(width: 10, height: 10))
+        let source = "![Icon](assets/test.png)"
+        let attributed = NSMutableAttributedString(attachment: attachment)
+        attributed.addAttribute(.mdeMarkdownSource, value: source, range: NSRange(location: 0, length: 1))
+        #expect(MarkdownImageSerialization.plaintext(from: attributed) == source)
+    }
+    #endif
+
+    @Test func externalImageParserSkipsVaultAndRemotePaths() {
+        let refs = MarkdownEmbeddedImageParser.externalReferences(in: """
+        ![A](./local.png)
+        ![B](assets/uuid.png)
+        ![C](https://example.com/x.png)
+        """)
+        #expect(refs.count == 1)
+        #expect(refs[0].target == "./local.png")
     }
 }

@@ -11,6 +11,7 @@ struct PlatformMarkdownEditor: View {
     var baseFontSize: CGFloat
     var reduceMotion: Bool
     var noteTitle: String
+    var imageURLForPath: (String) -> URL?
     var onTextChange: (String) -> Void
     var onWikiLinkClick: (String) -> Void
 
@@ -23,6 +24,7 @@ struct PlatformMarkdownEditor: View {
                 baseFontSize: baseFontSize,
                 reduceMotion: reduceMotion,
                 noteTitle: noteTitle,
+                imageURLForPath: imageURLForPath,
                 onTextChange: onTextChange,
                 onWikiLinkClick: onWikiLinkClick
             )
@@ -33,6 +35,7 @@ struct PlatformMarkdownEditor: View {
                 baseFontSize: baseFontSize,
                 reduceMotion: reduceMotion,
                 noteTitle: noteTitle,
+                imageURLForPath: imageURLForPath,
                 onTextChange: onTextChange,
                 onWikiLinkClick: onWikiLinkClick
             )

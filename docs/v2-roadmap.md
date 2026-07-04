@@ -1,6 +1,6 @@
 # MDE — v2 Roadmap
 
-> **Status:** Kickoff (2026-07-04)  
+> **Status:** v2.0 + v2.1 complete (2026-07-04)  
 > **Companion:** [spec.md](./spec.md) §4.2 · [optimization-plan.md](./optimization-plan.md)
 
 v1 and v1.1 are complete. v2 expands the content model (images, tables), import fidelity, and export packaging — without plugins or a marketplace (still non-goals).
@@ -19,7 +19,7 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 
 ## Phased delivery
 
-### v2.0 — Vault assets foundation *(in progress)*
+### v2.0 — Vault assets foundation *(complete)*
 
 | Item | Status |
 |------|--------|
@@ -27,17 +27,17 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 | `VaultAssetStore` — read/write under `assets/` | ✅ |
 | `![alt](assets/<id>.<ext>)` markdown convention | ✅ |
 | `importImage(intoNoteID:)` API | ✅ |
-| Image construct parsing + editor placeholder styling | ✅ |
-| Toolbar / file picker image insert UI | — |
-| Inline `NSTextAttachment` / `UIImage` rendering | — |
+| Image construct parsing + inline attachment rendering | ✅ |
+| Toolbar / file picker image insert UI | ✅ |
+| Asset sync (CloudKit) | — |
 
 **Exit:** Attach image to note in package vault; asset file on disk; markdown round-trips; unit tests pass.
 
-### v2.1 — Obsidian import fidelity
+### v2.1 — Obsidian import fidelity *(complete)*
 
-- Resolve `![](relative/path.png)` to vault assets when importing a folder
-- Optional `attachments/` and `.obsidian/` skip rules
-- WikiLink `[[Note]]` already supported; preserve folder note order
+- ✅ Resolve `![](relative/path.png)` to vault assets when importing a folder
+- ✅ Skip `.obsidian` during recursive import
+- WikiLink `[[Note]]` already supported
 
 ### v2.2 — Tables
 

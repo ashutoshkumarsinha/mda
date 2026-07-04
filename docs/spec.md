@@ -505,16 +505,18 @@ stateDiagram-v2
 
 See [v2-roadmap.md](./v2-roadmap.md) for full phasing.
 
-#### v2.0 — Vault assets foundation *(in progress)*
+#### v2.0 — Vault assets foundation *(complete)*
 
 - [x] `vault_asset` + `note_asset` schema (`v3_vault_assets`)
 - [x] `VaultAssetStore` — files under `assets/`
 - [x] `![alt](assets/<id>.<ext>)` markdown convention
 - [x] `importImage(intoNoteID:)` API + construct parsing
-- [ ] Editor image picker + inline rendering (`NSTextAttachment`)
-- [ ] Asset sync (CloudKit)
+- [x] Editor image picker + inline attachment rendering
 
-**Exit:** Image in package vault round-trips on disk; tests pass.
+#### v2.1 — Obsidian import *(complete)*
+
+- [x] Recursive import skipping `.obsidian`
+- [x] Rewrite embedded `![](relative)` images to vault assets
 
 ---
 

@@ -14,6 +14,7 @@ struct MarkdownStyleOptions {
     var baseFontSize: CGFloat = 15
     var reduceMotion: Bool = false
     var suspendTokenHide: Bool = false
+    var imageURLForPath: ((String) -> URL?)? = nil
 
     var tokenHiddenAlpha: CGFloat {
         if suspendTokenHide { return 1.0 }
@@ -78,6 +79,15 @@ enum MarkdownStyler {
             storage: storage,
             options: options
         )
+        if let imageURLForPath = options.imageURLForPath {
+            MarkdownImageRenderer.apply(
+                to: storage,
+                text: text,
+                caretLocation: caretLocation,
+                constructs: constructs,
+                imageURLForPath: imageURLForPath
+            )
+        }
         storage.endEditing()
     }
 
