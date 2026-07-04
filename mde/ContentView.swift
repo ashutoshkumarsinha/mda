@@ -110,7 +110,7 @@ struct ContentView: View {
                     Button {
                         showMarkdownImport = true
                     } label: {
-                        Label("Import Markdown / Obsidian…", systemImage: "square.and.arrow.down")
+                        Label("Import Markdown / Package…", systemImage: "square.and.arrow.down")
                     }
                 } label: {
                     Label("Vault", systemImage: "archivebox")
@@ -156,7 +156,7 @@ struct ContentView: View {
         }
         .fileImporter(
             isPresented: $showMarkdownImport,
-            allowedContentTypes: [.plainText],
+            allowedContentTypes: [.plainText, .zip, .folder],
             allowsMultipleSelection: true
         ) { result in
             importMarkdownFiles(result)
@@ -446,11 +446,17 @@ struct ContentView: View {
                 for url in urls {
                     let accessed = url.startAccessingSecurityScopedResource()
                     defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                    if url.hasDirectoryPath {
+                    if url.pathExtension.lowercased() == "zip" {
+                        _ = try store.importExportZip(from: url)
+                    } else if url.hasDirectoryPath {
                         var isDirectory: ObjCBool = false
                         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
                            isDirectory.boolValue {
-                            _ = try store.importObsidianDirectory(from: url)
+                            if VaultPackageImporter.isExportPackage(at: url) {
+                                _ = try store.importExportPackage(from: url)
+                            } else {
+                                _ = try store.importObsidianDirectory(from: url)
+                            }
                         } else {
                             _ = try store.importMarkdownDirectory(from: url)
                         }

@@ -136,6 +136,13 @@ enum MarkdownStyler {
                         .underlineStyle: NSUnderlineStyle.single.rawValue,
                     ], range: contentRange)
                 }
+            case .markdownLink:
+                if let contentRange = construct.contentRange, !isActive {
+                    storage.addAttributes([
+                        .foregroundColor: accent,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    ], range: contentRange)
+                }
             case .tag:
                 if let contentRange = construct.contentRange {
                     let alpha: CGFloat = isActive ? 1.0 : 0.85

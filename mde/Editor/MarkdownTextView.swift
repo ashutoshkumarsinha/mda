@@ -177,6 +177,11 @@ struct MarkdownTextView: NSViewRepresentable {
 
             if let title = MarkdownEditorLogic.wikiLinkTitle(at: index, in: textView.string) {
                 onWikiLinkClick(title)
+                return
+            }
+
+            if let url = MarkdownEditorLogic.externalLinkURL(at: index, in: textView.string) {
+                EditorPlatform.openURL(url)
             }
         }
 

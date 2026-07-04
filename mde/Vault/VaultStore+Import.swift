@@ -44,6 +44,23 @@ extension VaultStore {
         return imported
     }
 
+    /// Imports a v2.3 export folder (`meta.json`, `notes/`, `assets/`).
+    func importExportPackage(from rootURL: URL) throws -> [Note] {
+        try VaultPackageImporter.importPackage(at: rootURL, into: self)
+    }
+
+    /// Extracts and imports a v2.3 `.zip` export.
+    func importExportZip(from zipURL: URL) throws -> [Note] {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mde-import-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        try ZipArchiveReader.extractArchive(from: zipURL, to: tempDir)
+        guard VaultPackageImporter.isExportPackage(at: tempDir) else {
+            throw VaultImportError.invalidZipArchive
+        }
+        return try importExportPackage(from: tempDir)
+    }
+
     /// Recursively imports Markdown notes from a folder, skipping `.obsidian` and copying embedded images into vault assets.
     func importObsidianDirectory(from directoryURL: URL) throws -> [Note] {
         let markdownFiles = try Self.collectObsidianMarkdownFiles(in: directoryURL)

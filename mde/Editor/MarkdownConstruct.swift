@@ -10,6 +10,7 @@ struct MarkdownConstruct {
         case heading
         case bold
         case wikilink
+        case markdownLink
         case task
         case tag
         case blockquote
@@ -109,11 +110,28 @@ enum MarkdownConstructScanner {
         let literalExcluded = fenceExcluded + inlineCodes.map(\.fullRange)
         result.append(contentsOf: tableConstructs(in: text))
         result.append(contentsOf: wikiLinkConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: linkConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: boldConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: tagConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: imageConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: inlineCodes)
         return result
+    }
+
+    private static func linkConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
+        MarkdownLinkExtractor.references(in: text).compactMap { ref in
+            guard !ranges(excluding, contain: ref.fullRange) else { return nil }
+            let openBracket = NSRange(location: ref.fullRange.location, length: 1)
+            let closeBracket = NSRange(location: ref.labelRange.upperBound, length: 1)
+            let openParen = NSRange(location: ref.urlRange.location - 1, length: 1)
+            let closeParen = NSRange(location: ref.urlRange.upperBound, length: 1)
+            return MarkdownConstruct(
+                kind: .markdownLink,
+                fullRange: ref.fullRange,
+                tokenRanges: [openBracket, closeBracket, openParen, closeParen],
+                contentRange: ref.labelRange
+            )
+        }
     }
 
     static func constructContaining(location: Int, in constructs: [MarkdownConstruct]) -> MarkdownConstruct? {

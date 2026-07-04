@@ -34,6 +34,10 @@ enum EditorPlatform {
         let base = NSFont.systemFont(ofSize: size)
         return NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
     }
+
+    static func openURL(_ url: URL) {
+        NSWorkspace.shared.open(url)
+    }
 }
 
 #elseif canImport(UIKit)
@@ -67,6 +71,10 @@ enum EditorPlatform {
             return UIFont(descriptor: descriptor, size: size)
         }
         return base
+    }
+
+    static func openURL(_ url: URL) {
+        UIApplication.shared.open(url)
     }
 }
 #endif

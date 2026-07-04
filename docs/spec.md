@@ -55,7 +55,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **100+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
+**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **110+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
 
 ### Differentiation (v1)
 
@@ -103,12 +103,12 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 
 ### 4.2 v1 scope boundaries
 
-| In v1 | v1.1 *(shipped)* | v2 *(shipped)* |
-|-------|------------------|----------------|
-| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Package / zip export with `notes/`, `assets/`, `meta.json` ✅ |
-| Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Obsidian folder import with embedded images ✅ |
-| CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Vault images, GFM tables, encrypted asset sync ✅ |
-| Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | — |
+| In v1 | v1.1 *(shipped)* | v2 *(shipped)* | v3 *(shipped)* |
+|-------|------------------|----------------|----------------|
+| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Package / zip export with `notes/`, `assets/`, `meta.json` ✅ | Package / zip **import** (round-trip with v2.3 export) ✅ |
+| Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Obsidian folder import with embedded images ✅ | External `[text](url)` links ✅ |
+| CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Vault images, GFM tables, encrypted asset sync ✅ | WikiLink aliases `[[Note\|display]]` ✅ |
+| Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | — | — |
 
 ### 4.3 Non-goals
 
@@ -683,6 +683,10 @@ All open questions are **resolved** for v1/v1.1.
 
 Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. v2.0–v2.4 are complete: vault assets, Obsidian import, GFM tables, package/zip export, and encrypted CloudKit asset sync (`MDEAsset` records).
 
+## v3 roadmap
+
+Phased v3 delivery is documented in **[v3-roadmap.md](./v3-roadmap.md)**. v3.0–v3.2 are complete: package/zip import, external markdown links, and WikiLink aliases.
+
 ---
 
 ## 19. Glossary
@@ -712,3 +716,4 @@ Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. v2.0�
 | 1.3 | 2026-07-04 | v1.1 + hardening: SQLCipher, autosave snapshot recovery, inline code, graph/import/export, 82+ unit tests, all OQs closed, `meta.json` schema, GRDBCipher bootstrap |
 | 1.4 | 2026-07-04 | v2 kickoff: [v2-roadmap.md](./v2-roadmap.md), `vault_asset` schema, image import API |
 | 1.5 | 2026-07-04 | v2 complete: tables, export packaging, CloudKit asset sync, 100+ unit tests |
+| 1.6 | 2026-07-04 | v3 complete: package/zip import, external links, WikiLink aliases |

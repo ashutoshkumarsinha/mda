@@ -264,6 +264,44 @@ struct WikiLinkExtractorTests {
         let titles = WikiLinkExtractor.extractTitles(from: "See [[One]] and [[Two]]")
         #expect(titles == ["One", "Two"])
     }
+
+    @Test func aliasUsesTargetForIndexing() {
+        let titles = WikiLinkExtractor.extractTitles(from: "Go to [[Target Note|Display]]")
+        #expect(titles == ["Target Note"])
+    }
+
+    @Test func aliasLinkRangeUsesDisplayLabel() {
+        let links = WikiLinkExtractor.linkRanges(in: "See [[Target|Alias]] here")
+        #expect(links.count == 1)
+        #expect(links[0].title == "Target")
+        let ns = "See [[Target|Alias]] here" as NSString
+        #expect(ns.substring(with: links[0].titleRange) == "Alias")
+    }
+}
+
+struct MarkdownLinkExtractorTests {
+
+    @Test func extractsExternalLinks() {
+        let refs = MarkdownLinkExtractor.references(in: "Visit [MDE](https://example.com) today")
+        #expect(refs.count == 1)
+        #expect(refs[0].label == "MDE")
+        #expect(refs[0].url == "https://example.com")
+    }
+
+    @Test func skipsImageSyntax() {
+        let refs = MarkdownLinkExtractor.references(in: "![img](assets/x.png) and [link](https://a.test)")
+        #expect(refs.count == 1)
+        #expect(refs[0].label == "link")
+    }
+}
+
+struct MarkdownEditorLogicTests {
+
+    @Test func resolvesExternalLinkURL() {
+        let text = "Read [docs](https://example.com/docs) now"
+        let url = MarkdownEditorLogic.externalLinkURL(at: 8, in: text)
+        #expect(url?.absoluteString == "https://example.com/docs")
+    }
 }
 
 struct TaskListHelperTests {
@@ -1728,6 +1766,68 @@ struct VaultExportTests {
         } catch VaultExportError.assetsUnavailable {
             #expect(Bool(true))
         }
+    }
+}
+
+// MARK: - v3 package import
+
+@MainActor
+struct VaultPackageImportTests {
+
+    @Test func roundTripsPackageExport() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let pngBytes = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        ])
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("pic.png")
+        try pngBytes.write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let source = VaultStore()
+        try source.attachToPackage(at: tempDir)
+        let note = try source.createNote(title: "Exported", content: "Before")
+        let markdown = try source.importImage(from: imageURL, intoNoteID: note.id, altText: "Pic")
+        _ = try source.updateNote(id: note.id, content: "Has image\n\n\(markdown)")
+
+        let exportDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: exportDir) }
+        let wrapper = try source.makeVaultPackageExportWrapper()
+        try wrapper.write(to: exportDir, options: .atomic, originalContentsURL: nil)
+
+        let destino = VaultStore()
+        let importDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: importDir) }
+        try destino.attachToPackage(at: importDir)
+
+        let imported = try destino.importExportPackage(from: exportDir)
+        #expect(imported.count == 1)
+        #expect(imported[0].title == "Has image")
+        #expect(imported[0].content.contains("assets/"))
+        #expect(VaultPackageImporter.isExportPackage(at: exportDir))
+    }
+
+    @Test func roundTripsZipExport() throws {
+        let source = VaultStore()
+        _ = try source.createNote(title: "Zip Note", content: "Zip body")
+        let zip = try source.makeVaultZipExportData()
+
+        let zipURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).zip")
+        try zip.write(to: zipURL)
+        defer { try? FileManager.default.removeItem(at: zipURL) }
+
+        let dest = VaultStore()
+        let imported = try dest.importExportZip(from: zipURL)
+        #expect(imported.count == 1)
+        #expect(imported[0].title == "Zip Note")
+        #expect(imported[0].content == "Zip body")
     }
 }
 
