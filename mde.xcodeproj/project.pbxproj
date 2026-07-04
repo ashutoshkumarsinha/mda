@@ -237,7 +237,7 @@
 			mainGroup = 027480F82FED070800B678AB;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */,
+				027481302FED070900B678AB /* XCLocalSwiftPackageReference "GRDBCipher" */,
 				027481342FED070900B678AB /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -654,15 +654,14 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/groue/GRDB.swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 7.0.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		027481302FED070900B678AB /* XCLocalSwiftPackageReference "GRDBCipher" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/GRDBCipher;
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		027481342FED070900B678AB /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-markdown";
@@ -676,12 +675,12 @@
 /* Begin XCSwiftPackageProductDependency section */
 		027481312FED070900B678AB /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */;
+			package = 027481302FED070900B678AB /* XCLocalSwiftPackageReference "GRDBCipher" */;
 			productName = GRDB;
 		};
 		027481332FED070900B678AB /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 027481302FED070900B678AB /* XCRemoteSwiftPackageReference "GRDB" */;
+			package = 027481302FED070900B678AB /* XCLocalSwiftPackageReference "GRDBCipher" */;
 			productName = GRDB;
 		};
 		027481352FED070900B678AB /* Markdown */ = {

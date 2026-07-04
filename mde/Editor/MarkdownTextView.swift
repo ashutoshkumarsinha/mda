@@ -34,7 +34,20 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
 
-        let textView = PlainTextPasteTextView()
+        let textStorage = MarkdownTokenTextStorage()
+        textStorage.styleOptions = styleOptions
+        textStorage.attachStyleController(context.coordinator.styleController)
+        if !text.isEmpty {
+            textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
+        }
+
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        let textContainer = NSTextContainer()
+        textContainer.widthTracksTextView = true
+        layoutManager.addTextContainer(textContainer)
+
+        let textView = PlainTextPasteTextView(frame: .zero, textContainer: textContainer)
         textView.delegate = context.coordinator
         textView.isRichText = true
         textView.importsGraphics = false
@@ -43,11 +56,9 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.font = .systemFont(ofSize: baseFontSize)
         textView.textContainerInset = NSSize(width: 16, height: 16)
-        textView.string = text
         textView.backgroundColor = .textBackgroundColor
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
@@ -67,6 +78,9 @@ struct MarkdownTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.resolvedLinkTitles = resolvedLinkTitles
         context.coordinator.styleController.styleOptions = styleOptions
+        if let tokenStorage = textView.textStorage as? MarkdownTokenTextStorage {
+            tokenStorage.styleOptions = styleOptions
+        }
         textView.font = .systemFont(ofSize: baseFontSize)
         configureAccessibility(on: textView)
         if textView.string != text {

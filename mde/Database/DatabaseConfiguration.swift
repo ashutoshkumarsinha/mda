@@ -12,16 +12,19 @@ enum DatabaseConfiguration {
     /// Memory-mapped I/O budget for large vaults (256 MB).
     static let mmapSizeBytes: Int64 = 256 * 1_024 * 1_024
 
-    static func makeConfiguration() -> Configuration {
+    static func makeConfiguration(passphrase: Data? = nil) -> Configuration {
         var config = Configuration()
         config.prepareDatabase { db in
+            if let passphrase {
+                try db.usePassphrase(passphrase)
+            }
             try applyPragmas(on: db)
         }
         return config
     }
 
-    static func makeQueue(path: String? = nil) throws -> DatabaseQueue {
-        let config = makeConfiguration()
+    static func makeQueue(path: String? = nil, passphrase: Data? = nil) throws -> DatabaseQueue {
+        let config = makeConfiguration(passphrase: passphrase)
         if let path {
             return try DatabaseQueue(path: path, configuration: config)
         }
@@ -34,6 +37,7 @@ enum DatabaseConfiguration {
         try db.execute(sql: "PRAGMA cache_size = \(cacheSizeKiB)")
         try db.execute(sql: "PRAGMA mmap_size = \(mmapSizeBytes)")
         try db.execute(sql: "PRAGMA temp_store = MEMORY")
+        try db.execute(sql: "PRAGMA cipher_memory_security = ON")
     }
 
     static func journalMode(on db: Database) throws -> String {

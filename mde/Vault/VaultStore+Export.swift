@@ -35,6 +35,35 @@ extension VaultStore {
         return "# \(trimmedTitle)\n\n\(note.content)"
     }
 
+    /// Exports every active note as Markdown files in a directory wrapper (no full DB export).
+    func makeVaultMarkdownExportWrapper() throws -> FileWrapper {
+        let summaries = try noteSummariesFiltered(by: nil)
+        var children: [String: FileWrapper] = [:]
+        var usedNames = Set<String>()
+
+        for summary in summaries {
+            guard let note = try fetchNote(id: summary.id) else { continue }
+            var filename = exportFilename(for: summary.id)
+            while usedNames.contains(filename) {
+                filename = "\(UUID().uuidString.prefix(6))-\(filename)"
+            }
+            usedNames.insert(filename)
+            let markdown = Self.markdownExport(for: note)
+            children[filename] = FileWrapper(regularFileWithContents: Data(markdown.utf8))
+        }
+
+        return FileWrapper(directoryWithFileWrappers: children)
+    }
+
+    /// Single-file vault export for quick sharing.
+    func exportVaultAsCombinedMarkdown() throws -> String {
+        let summaries = try noteSummariesFiltered(by: nil)
+        return try summaries.compactMap { summary -> String? in
+            guard let note = try fetchNote(id: summary.id) else { return nil }
+            return "<!-- note-id: \(note.id) -->\n" + Self.markdownExport(for: note)
+        }.joined(separator: "\n\n---\n\n")
+    }
+
     private static func sanitizeFilename(_ name: String) -> String {
         let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
         let cleaned = name.components(separatedBy: invalid).joined(separator: "-")

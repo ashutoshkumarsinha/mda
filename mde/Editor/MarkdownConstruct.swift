@@ -12,6 +12,9 @@ struct MarkdownConstruct {
         case wikilink
         case task
         case tag
+        case blockquote
+        case codeFence
+        case codeBlockLine
     }
 
     var kind: Kind
@@ -25,13 +28,45 @@ enum MarkdownConstructScanner {
         var result: [MarkdownConstruct] = []
         let nsText = text as NSString
         var lineLocation = 0
+        var inCodeFence = false
 
         for line in text.components(separatedBy: "\n") {
             let lineLength = (line as NSString).length
             let lineRange = NSRange(location: lineLocation, length: lineLength)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmed.hasPrefix("#") {
+            if trimmed.hasPrefix("```") {
+                inCodeFence.toggle()
+                let fenceRange = NSRange(
+                    location: lineLocation + (line as NSString).range(of: trimmed).location,
+                    length: (trimmed as NSString).length
+                )
+                result.append(MarkdownConstruct(
+                    kind: .codeFence,
+                    fullRange: lineRange,
+                    tokenRanges: [fenceRange],
+                    contentRange: nil
+                ))
+            } else if inCodeFence {
+                result.append(MarkdownConstruct(
+                    kind: .codeBlockLine,
+                    fullRange: lineRange,
+                    tokenRanges: [],
+                    contentRange: lineRange
+                ))
+            } else if trimmed.hasPrefix(">") {
+                let markerLength = trimmed.prefix(while: { $0 == ">" || $0.isWhitespace }).count
+                let leadingSpaces = line.count - line.drop(while: { $0.isWhitespace }).count
+                let tokenEnd = lineLocation + leadingSpaces + markerLength
+                result.append(MarkdownConstruct(
+                    kind: .blockquote,
+                    fullRange: lineRange,
+                    tokenRanges: [NSRange(location: lineLocation + leadingSpaces, length: markerLength)],
+                    contentRange: NSRange(location: tokenEnd, length: max(0, lineRange.upperBound - tokenEnd))
+                ))
+            }
+
+            if trimmed.hasPrefix("#") && !inCodeFence {
                 let hashCount = trimmed.prefix(while: { $0 == "#" }).count
                 let leadingSpaces = line.count - line.drop(while: { $0.isWhitespace }).count
                 let tokenEnd = lineLocation + leadingSpaces + hashCount
@@ -45,7 +80,7 @@ enum MarkdownConstructScanner {
                 }
             }
 
-            if line.range(of: #"^\s*[-*]\s+\[[ xX]\]"#, options: .regularExpression) != nil {
+            if line.range(of: #"^\s*[-*]\s+\[[ xX]\]"#, options: .regularExpression) != nil, !inCodeFence {
                 if let checkboxRange = checkboxTokenRange(in: line, lineLocation: lineLocation) {
                     result.append(MarkdownConstruct(
                         kind: .task,

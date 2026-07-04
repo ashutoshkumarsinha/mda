@@ -13,6 +13,8 @@ enum EditorPlatform {
     typealias Font = NSFont
 
     static var labelColor: Color { .labelColor }
+    static var secondaryLabelColor: Color { .secondaryLabelColor }
+    static var quaternaryLabelColor: Color { .quaternaryLabelColor }
     static var linkColor: Color { .linkColor }
     static var textBackgroundColor: Color { .textBackgroundColor }
 
@@ -42,6 +44,8 @@ enum EditorPlatform {
     typealias Font = UIFont
 
     static var labelColor: Color { .label }
+    static var secondaryLabelColor: Color { .secondaryLabel }
+    static var quaternaryLabelColor: Color { .quaternaryLabel }
     static var linkColor: Color { .link }
     static var textBackgroundColor: Color { .systemBackground }
 

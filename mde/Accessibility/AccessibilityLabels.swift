@@ -14,6 +14,22 @@ enum AccessibilityLabels {
     static let emptyTrash = "Empty trash permanently"
     static let backlinksPanel = "Backlinks panel"
     static let emptyBacklinks = "No notes link here yet"
+    static let trashedNoteReadOnly = "Trashed note, read only"
+    static let vaultMenu = "Vault actions menu"
+    static let graphCanvas = "Wiki link graph"
+    static let graphLegend = "Graph legend: notes and unresolved links"
+    static let graphLayoutPicker = "Graph layout style"
+    static let graphFocusToggle = "Focus on selected note neighborhood"
+    static let graphFitView = "Fit graph to view"
+    static let graphReload = "Reload link graph"
+
+    static func graphNode(title: String, isUnresolved: Bool, linkCount: Int) -> String {
+        if isUnresolved {
+            return "Unresolved link \(title), \(linkCount) connections"
+        }
+        return "Note \(title), \(linkCount) connections"
+    }
+
     static let allTagsFilter = "All notes, show every tag"
 
     static func noteListScope(_ scope: String) -> String {

@@ -26,98 +26,16 @@ struct NoteEditorView: View {
     @State private var showCreateWikiLinkSheet = false
     @State private var showExportPicker = false
     @State private var exportDocument = MarkdownExportDocument()
+    @State private var editorSummary: NoteListItem?
+    @State private var isTrashedNote = false
 
     var body: some View {
         Group {
-            if let activeNoteID = noteID, let summary = store.noteSummary(id: activeNoteID) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(store.noteDisplayTitle(summary))
-                        .font(.title3.weight(.semibold))
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 4)
-                        .accessibilityAddTraits(.isHeader)
-
-                    if let autosaveError = editorState.autosaveErrorMessage {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text(autosaveError)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 4)
-                        .accessibilityLabel("Save error: \(autosaveError)")
-                    }
-
-                    backlinksSection(noteID: activeNoteID, title: summary.title)
-
-                    PlatformMarkdownEditor(
-                        text: $editorText,
-                        resolvedLinkTitles: store.resolvedWikiLinkTitles(in: editorText),
-                        baseFontSize: EditorTypography.baseFontSize(for: dynamicTypeSize),
-                        reduceMotion: reduceMotion,
-                        noteTitle: store.noteDisplayTitle(summary),
-                        onTextChange: { updated in
-                            store.scheduleAutosave(noteID: activeNoteID, content: updated)
-                        },
-                        onWikiLinkClick: { title in
-                            handleWikiLinkClick(title)
-                        }
-                    )
-                }
-                .accessibilityLabel(AccessibilityLabels.noteEditor)
-                #if os(macOS)
-                .focusSection()
-                #endif
-                .toolbar {
-                    ToolbarItem {
-                        Button {
-                            prepareExport(noteID: activeNoteID)
-                        } label: {
-                            Label("Export", systemImage: "square.and.arrow.up")
-                        }
-                        .accessibilityLabel(AccessibilityLabels.exportNote)
-                        .help("Export note as Markdown")
-                    }
-                }
-                .onAppear {
-                    loadNote(id: activeNoteID)
-                }
-                .onChange(of: noteID) { _, newID in
-                    guard let newID else { return }
-                    resetBacklinksState()
-                    loadNote(id: newID)
-                }
-                .onChange(of: editorState.contentEpoch) { _, _ in
-                    syncEditorFromStore(noteID: activeNoteID)
-                }
-                .onChange(of: listState.revision) { _, _ in
-                    if store.noteSummary(id: activeNoteID) == nil {
-                        selectedNoteID = nil
-                    }
-                }
-                .onChange(of: editorState.linksRevision) { _, _ in
-                    if backlinksExpanded, backlinksLoaded,
-                       let summary = store.noteSummary(id: activeNoteID) {
-                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
-                    }
-                }
-                .onChange(of: backlinksExpanded) { _, expanded in
-                    if expanded, !backlinksLoaded,
-                       let summary = store.noteSummary(id: activeNoteID) {
-                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
-                        backlinksLoaded = true
-                    }
-                }
-                .onChange(of: editorState.autosaveErrorMessage) { _, message in
-                    if let message {
-                        errorMessage = message
-                    }
-                }
-                .background(shortcutButtons(noteID: activeNoteID))
+            if let activeNoteID = noteID, let summary = editorSummary {
+                editorContent(activeNoteID: activeNoteID, summary: summary)
+            } else if noteID != nil {
+                ProgressView("Loading note…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ContentUnavailableView(
                     "Select a note",
@@ -126,6 +44,16 @@ struct NoteEditorView: View {
                 )
                 .accessibilityLabel(AccessibilityLabels.emptyNoteSelection)
             }
+        }
+        .task(id: noteID) {
+            guard let id = noteID else {
+                editorSummary = nil
+                isTrashedNote = false
+                return
+            }
+            resetBacklinksState()
+            refreshEditorContext(noteID: id)
+            loadNote(id: id)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .fileExporter(
@@ -159,6 +87,108 @@ struct NoteEditorView: View {
         } message: { title in
             Text("No note titled \"\(title)\" exists yet.")
         }
+    }
+
+    @ViewBuilder
+    private func editorContent(activeNoteID: String, summary: NoteListItem) -> some View {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(store.noteDisplayTitle(summary))
+                        .font(.title3.weight(.semibold))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 4)
+                        .accessibilityAddTraits(.isHeader)
+
+                    if isTrashedNote {
+                        HStack(spacing: 8) {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.secondary)
+                            Text("This note is in Trash. Restore it to edit.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Restore") {
+                                restoreTrashedNote(id: activeNoteID)
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                        .accessibilityLabel(AccessibilityLabels.trashedNoteReadOnly)
+                    }
+
+                    if let autosaveError = editorState.autosaveErrorMessage {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(autosaveError)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
+                        .accessibilityLabel("Save error: \(autosaveError)")
+                    }
+
+                    backlinksSection(noteID: activeNoteID, title: summary.title)
+
+                    PlatformMarkdownEditor(
+                        text: $editorText,
+                        resolvedLinkTitles: store.resolvedWikiLinkTitles(in: editorText),
+                        baseFontSize: EditorTypography.baseFontSize(for: dynamicTypeSize),
+                        reduceMotion: reduceMotion,
+                        noteTitle: store.noteDisplayTitle(summary),
+                        onTextChange: { updated in
+                            guard !isTrashedNote else { return }
+                            store.scheduleAutosave(noteID: activeNoteID, content: updated)
+                        },
+                        onWikiLinkClick: { title in
+                            handleWikiLinkClick(title)
+                        }
+                    )
+                }
+                .accessibilityLabel(AccessibilityLabels.noteEditor)
+                #if os(macOS)
+                .focusSection()
+                #endif
+                .toolbar {
+                    ToolbarItem {
+                        Button {
+                            prepareExport(noteID: activeNoteID)
+                        } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel(AccessibilityLabels.exportNote)
+                        .help("Export note as Markdown")
+                    }
+                }
+                .onChange(of: editorState.contentEpoch) { _, _ in
+                    syncEditorFromStore(noteID: activeNoteID)
+                }
+                .onChange(of: listState.revision) { _, _ in
+                    refreshEditorContext(noteID: activeNoteID)
+                    if !isTrashedNote, store.noteSummary(id: activeNoteID) == nil {
+                        selectedNoteID = nil
+                    }
+                }
+                .onChange(of: editorState.linksRevision) { _, _ in
+                    if backlinksExpanded, backlinksLoaded {
+                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
+                    }
+                }
+                .onChange(of: backlinksExpanded) { _, expanded in
+                    if expanded, !backlinksLoaded {
+                        reloadBacklinks(noteID: activeNoteID, title: summary.title)
+                        backlinksLoaded = true
+                    }
+                }
+                .onChange(of: editorState.autosaveErrorMessage) { _, message in
+                    if let message {
+                        errorMessage = message
+                    }
+                }
+                .background(shortcutButtons(noteID: activeNoteID))
     }
 
     @ViewBuilder
@@ -225,8 +255,29 @@ struct NoteEditorView: View {
 
     private func loadNote(id: String) {
         loadedNoteID = id
-        if let note = try? store.fetchNote(id: id) {
+        if let note = try? store.fetchNote(id: id, includeDeleted: true) {
             editorText = note.content
+            isTrashedNote = note.isDeleted
+            if !note.isDeleted {
+                ColdLaunchBenchmark.markEditorReady()
+            }
+        }
+    }
+
+    private func refreshEditorContext(noteID: String) {
+        editorSummary = try? store.fetchListItem(id: noteID)
+        if let note = try? store.fetchNote(id: noteID, includeDeleted: true) {
+            isTrashedNote = note.isDeleted
+        }
+    }
+
+    private func restoreTrashedNote(id: String) {
+        do {
+            try store.restoreNote(id: id)
+            try store.flushPackageIfNeeded()
+            refreshEditorContext(noteID: id)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -238,9 +289,10 @@ struct NoteEditorView: View {
 
     private func syncEditorFromStore(noteID: String) {
         guard noteID == loadedNoteID,
-              let note = try? store.fetchNote(id: noteID),
+              let note = try? store.fetchNote(id: noteID, includeDeleted: true),
               editorText != note.content else { return }
         editorText = note.content
+        isTrashedNote = note.isDeleted
     }
 
     private func reloadBacklinks(noteID: String, title: String) {

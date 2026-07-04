@@ -126,6 +126,28 @@ enum MarkdownStyler {
                         range: tokenRange
                     )
                 }
+            case .codeBlockLine:
+                if let contentRange = construct.contentRange {
+                    storage.addAttributes([
+                        .font: EditorPlatform.monospacedSystemFont(ofSize: options.baseFontSize - 1),
+                        .backgroundColor: EditorPlatform.quaternaryLabelColor.withAlphaComponent(0.15),
+                    ], range: contentRange)
+                }
+            case .codeFence:
+                if let tokenRange = construct.tokenRanges.first {
+                    storage.addAttribute(
+                        .font,
+                        value: EditorPlatform.monospacedSystemFont(ofSize: options.baseFontSize - 1),
+                        range: tokenRange
+                    )
+                }
+            case .blockquote:
+                if let contentRange = construct.contentRange, contentRange.length > 0 {
+                    storage.addAttributes([
+                        .foregroundColor: EditorPlatform.secondaryLabelColor,
+                        .paragraphStyle: blockquoteParagraphStyle(),
+                    ], range: contentRange)
+                }
             default:
                 break
             }
@@ -217,6 +239,13 @@ enum MarkdownStyler {
         let style = NSMutableParagraphStyle()
         style.headIndent = 20
         style.firstLineHeadIndent = 8
+        return style
+    }
+
+    private static func blockquoteParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.headIndent = 14
+        style.firstLineHeadIndent = 14
         return style
     }
 }

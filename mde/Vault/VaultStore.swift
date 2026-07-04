@@ -62,6 +62,7 @@ final class VaultStore {
     private var periodicPersistTask: Task<Void, Never>?
     private var packageDirty = false
     private var titleIndex: [String: String] = [:]
+    private let databaseKeyStore: VaultDatabaseKeyStoring
 
     /// Test / legacy access — list metadata only; use `fetchNote(id:)` for body text.
     var notes: [Note] {
@@ -76,8 +77,9 @@ final class VaultStore {
         }
     }
 
-    init(meta: VaultMeta = .makeNew()) {
+    init(meta: VaultMeta = .makeNew(), databaseKeyStore: VaultDatabaseKeyStoring = KeychainVaultDatabaseKeyStore()) {
         self.meta = meta
+        self.databaseKeyStore = databaseKeyStore
         openInMemoryDatabase()
     }
 
@@ -107,7 +109,15 @@ final class VaultStore {
 
         if fileManager.fileExists(atPath: databaseURL.path) {
             do {
-                dbQueue = try Self.openValidatedDatabase(at: databaseURL)
+                dbQueue = try DatabaseEncryption.openPackageDatabase(
+                    at: databaseURL,
+                    vaultID: meta.vaultID,
+                    keyStore: databaseKeyStore
+                )
+                if !meta.databaseEncrypted {
+                    meta.databaseEncrypted = true
+                    try meta.data().write(to: metaURL, options: .atomic)
+                }
             } catch {
                 let backupURL = VaultPaths.backupDatabaseURL(in: url)
                 if fileManager.fileExists(atPath: backupURL.path) {
@@ -117,11 +127,33 @@ final class VaultStore {
                 throw error
             }
         } else if let existing = dbQueue {
-            let exported = try Self.exportDatabase(from: existing)
-            try exported.write(to: databaseURL, options: .atomic)
-            dbQueue = try DatabaseConfiguration.makeQueue(path: databaseURL.path)
+            let key = try databaseKeyStore.loadOrCreateKey(vaultID: meta.vaultID)
+            if fileManager.fileExists(atPath: databaseURL.path) {
+                try fileManager.removeItem(at: databaseURL)
+            }
+            try existing.write { db in
+                try db.execute(
+                    sql: "ATTACH DATABASE ? AS encrypted KEY ?",
+                    arguments: [databaseURL.path, key]
+                )
+                try db.execute(sql: "SELECT sqlcipher_export('encrypted')")
+                try db.execute(sql: "PRAGMA encrypted.journal_mode = DELETE")
+            }
+            dbQueue = try DatabaseEncryption.openPackageDatabase(
+                at: databaseURL,
+                vaultID: meta.vaultID,
+                keyStore: databaseKeyStore
+            )
+            meta.databaseEncrypted = true
+            try meta.data().write(to: metaURL, options: .atomic)
         } else {
-            dbQueue = try DatabaseConfiguration.makeQueue(path: databaseURL.path)
+            dbQueue = try DatabaseEncryption.openPackageDatabase(
+                at: databaseURL,
+                vaultID: meta.vaultID,
+                keyStore: databaseKeyStore
+            )
+            meta.databaseEncrypted = true
+            try meta.data().write(to: metaURL, options: .atomic)
         }
 
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
@@ -146,7 +178,11 @@ final class VaultStore {
         }
         try fileManager.copyItem(at: backupURL, to: databaseURL)
 
-        dbQueue = try Self.openValidatedDatabase(at: databaseURL)
+        dbQueue = try DatabaseEncryption.openPackageDatabase(
+            at: databaseURL,
+            vaultID: meta.vaultID,
+            keyStore: databaseKeyStore
+        )
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
         needsDatabaseRecovery = false
         autosaveErrorMessage = nil
@@ -165,19 +201,18 @@ final class VaultStore {
 
     func makeSnapshot() throws -> VaultFileSnapshot {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
-        let databaseData = try Self.exportDatabase(from: dbQueue)
+        let passphrase = isPackageAttached && meta.databaseEncrypted
+            ? try databaseKeyStore.loadOrCreateKey(vaultID: meta.vaultID)
+            : nil
+        let databaseData = try Self.exportDatabase(from: dbQueue, passphrase: passphrase)
         return VaultFileSnapshot(meta: meta, databaseData: databaseData)
     }
 
     func persistToPackageIfNeeded() throws {
-        guard let packageURL, let dbQueue else { return }
+        guard let packageURL else { return }
 
         try PerformanceSignpost.measure(.vaultPersistPackage) {
             try meta.data().write(to: VaultPaths.metaURL(in: packageURL), options: .atomic)
-
-            let databaseURL = VaultPaths.databaseURL(in: packageURL)
-            let exported = try Self.exportDatabase(from: dbQueue)
-            try exported.write(to: databaseURL, options: .atomic)
         }
         packageDirty = false
     }
@@ -193,10 +228,27 @@ final class VaultStore {
         schedulePersistToPackage()
     }
 
-    func fetchNote(id: String) throws -> Note? {
+    func fetchNote(id: String, includeDeleted: Bool = false) throws -> Note? {
         guard let dbQueue else { return nil }
         return try dbQueue.read { db in
-            try Note.filter(Note.Columns.id == id).fetchOne(db)
+            var request = Note.filter(Note.Columns.id == id)
+            if !includeDeleted {
+                request = request.filter(Note.Columns.isDeleted == false)
+            }
+            return try request.fetchOne(db)
+        }
+    }
+
+    /// Resolves list metadata for editor/trash — falls back to SQL when not cached.
+    func fetchListItem(id: String) throws -> NoteListItem? {
+        if let cached = noteSummary(id: id) { return cached }
+        guard let dbQueue else { return nil }
+        return try dbQueue.read { db in
+            try Row.fetchOne(db, sql: """
+                \(Self.listItemSelectSQL)
+                FROM note n
+                WHERE n.id = ?
+            """, arguments: [id]).map(Self.mapListItemRow)
         }
     }
 
@@ -630,11 +682,45 @@ final class VaultStore {
             try dbQueue.write { db in
                 try db.execute(sql: "VACUUM")
             }
+        } else {
+            try? dbQueue.write { db in
+                try db.execute(sql: "PRAGMA incremental_vacuum")
+            }
         }
         try reloadTagTree()
         editorState.bumpLinksRevision()
         markPackageDirty()
         return count
+    }
+
+    // MARK: - Link graph
+
+    func fetchWikiLinkGraph() throws -> (nodes: [WikiGraphNode], edges: [WikiGraphEdge]) {
+        guard let dbQueue else { return ([], []) }
+        return try dbQueue.read { db in
+            let nodes = try WikiGraphNode.fetchAll(db, sql: """
+                SELECT id, title
+                FROM note
+                WHERE is_deleted = 0
+                ORDER BY title COLLATE NOCASE ASC
+            """)
+
+            let edges = try Row.fetchAll(db, sql: """
+                SELECT nl.id, nl.source_id, nl.target_id, nl.target_title
+                FROM note_link nl
+                JOIN note n ON n.id = nl.source_id
+                WHERE n.is_deleted = 0
+            """).map { row in
+                WikiGraphEdge(
+                    id: row["id"],
+                    sourceID: row["source_id"],
+                    targetID: row["target_id"],
+                    targetTitle: row["target_title"]
+                )
+            }
+
+            return (nodes, edges)
+        }
     }
 
     // MARK: - Sync
@@ -898,6 +984,8 @@ final class VaultStore {
     private func applyNoteChanged(_ note: Note, previousContent: String?) throws {
         let snippet = NoteListItem.makeSnippet(from: note.content)
         let item = NoteListItem(note: note, snippet: snippet)
+        let previousItem = noteSummaries.first { $0.id == note.id }
+
         insertSummarySorted(item)
         rebuildTitleIndex()
 
@@ -914,7 +1002,15 @@ final class VaultStore {
         }
 
         editorState.bumpContentEpoch()
-        listState.bumpRevision()
+
+        let listMetadataChanged = previousItem.map {
+            $0.title != item.title
+                || $0.snippet != item.snippet
+                || $0.isPinned != item.isPinned
+        } ?? true
+        if listMetadataChanged {
+            listState.bumpRevision()
+        }
     }
 
     private func insertSummarySorted(_ item: NoteListItem) {
@@ -972,30 +1068,6 @@ final class VaultStore {
         }
     }
 
-    private static func openValidatedDatabase(at url: URL) throws -> DatabaseQueue {
-        let data = try Data(contentsOf: url)
-        guard data.count >= 16,
-              let header = String(data: data.prefix(16), encoding: .ascii),
-              header.hasPrefix("SQLite format 3") else {
-            throw VaultError.databaseCorrupt(backupAvailable: false)
-        }
-
-        let queue = try DatabaseConfiguration.makeQueue(path: url.path)
-        try queue.read { db in
-            let result = try String.fetchOne(db, sql: "PRAGMA integrity_check") ?? "failed"
-            guard result == "ok" else {
-                throw VaultError.databaseCorrupt(backupAvailable: false)
-            }
-            let noteTable = try String.fetchOne(db, sql: """
-                SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'note'
-            """)
-            guard noteTable == "note" else {
-                throw VaultError.databaseCorrupt(backupAvailable: false)
-            }
-        }
-        return queue
-    }
-
     private static func ftsQuery(from userInput: String) -> String {
         userInput
             .split(whereSeparator: \.isWhitespace)
@@ -1014,16 +1086,28 @@ final class VaultStore {
         return try DatabaseConfiguration.makeQueue(path: tempURL.path)
     }
 
-    private static func exportDatabase(from source: DatabaseQueue) throws -> Data {
+    private static func exportDatabase(from source: DatabaseQueue, passphrase: Data? = nil) throws -> Data {
         try PerformanceSignpost.measure(.vaultExportDatabase) {
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("db")
             defer { try? FileManager.default.removeItem(at: url) }
 
-            let destination = try DatabaseConfiguration.makeQueue(path: url.path)
-            try source.backup(to: destination)
-            try destination.close()
+            do {
+                let destination = try DatabaseConfiguration.makeQueue(path: url.path)
+                try source.backup(to: destination)
+                try destination.close()
+            } catch {
+                guard let passphrase else { throw error }
+                try source.write { db in
+                    try db.execute(
+                        sql: "ATTACH DATABASE ? AS plaintext KEY ''",
+                        arguments: [url.path]
+                    )
+                    try db.execute(sql: "SELECT sqlcipher_export('plaintext')")
+                    try db.execute(sql: "PRAGMA plaintext.journal_mode = DELETE")
+                }
+            }
             return try Data(contentsOf: url)
         }
     }

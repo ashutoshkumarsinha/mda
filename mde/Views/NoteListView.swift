@@ -124,7 +124,10 @@ struct NoteListView: View {
                 }
             }
         }
-        .onAppear { reload(resetLoadedWindow: true) }
+        .onAppear {
+            reload(resetLoadedWindow: true)
+            bootstrapBenchmarkColdLaunchIfNeeded()
+        }
         .onChange(of: tagPath) { _, _ in reload(resetLoadedWindow: true) }
         .onChange(of: listState.revision) { _, _ in reload(resetLoadedWindow: false) }
         .onChange(of: searchQuery) { _, newValue in
@@ -284,6 +287,7 @@ struct NoteListView: View {
                !displayedRows.contains(where: { $0.id == selectedNoteID }) {
                 self.selectedNoteID = displayedRows.first?.id
             }
+            bootstrapBenchmarkColdLaunchIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -332,6 +336,30 @@ struct NoteListView: View {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func bootstrapBenchmarkColdLaunchIfNeeded() {
+        guard LaunchArguments.benchmarkColdLaunch else { return }
+        if let selectedNoteID,
+           displayedRows.contains(where: { $0.id == selectedNoteID }) {
+            return
+        }
+        if let first = displayedRows.first {
+            selectedNoteID = first.id
+            completeBenchmarkColdLaunchIfPossible(noteID: first.id)
+        } else {
+            addNote()
+            if let selectedNoteID {
+                completeBenchmarkColdLaunchIfPossible(noteID: selectedNoteID)
+            }
+        }
+    }
+
+    private func completeBenchmarkColdLaunchIfPossible(noteID: String) {
+        guard LaunchArguments.benchmarkColdLaunch else { return }
+        if let note = try? store.fetchNote(id: noteID, includeDeleted: true), !note.isDeleted {
+            ColdLaunchBenchmark.markEditorReady()
         }
     }
 

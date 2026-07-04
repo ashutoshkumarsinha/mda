@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch GRDB sources for SQLCipher
+        run: ./scripts/setup-grdb-cipher.sh
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
@@ -29,7 +32,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CLANG_ENABLE_CODE_COVERAGE=NO
 
-      - name: Unit tests + performance baselines (Phase 0–6)
+      - name: Unit tests + regression gates (Phases 0–7 + completion)
         run: |
           xcodebuild \
             -project mde.xcodeproj \
@@ -45,6 +48,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch GRDB sources for SQLCipher
+        run: ./scripts/setup-grdb-cipher.sh
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -87,6 +93,17 @@ jobs:
             -scheme mde \
             -destination "platform=iOS Simulator,id=${{ steps.ios_sim.outputs.udid }}" \
             -only-testing:mdeTests \
+            test \
+            CODE_SIGNING_ALLOWED=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO
+
+      - name: UI tests (iOS Simulator)
+        run: |
+          xcodebuild \
+            -project mde.xcodeproj \
+            -scheme mde \
+            -destination "platform=iOS Simulator,id=${{ steps.ios_sim.outputs.udid }}" \
+            -only-testing:mdeUITests \
             test \
             CODE_SIGNING_ALLOWED=NO \
             CLANG_ENABLE_CODE_COVERAGE=NO

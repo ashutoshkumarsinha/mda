@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var store: VaultStore
@@ -18,6 +19,13 @@ struct ContentView: View {
     @State private var syncCoordinator: SyncCoordinator?
     @State private var showRecoveryAlert = false
     @State private var recoveryError: String?
+    @State private var showGraph = false
+    @State private var showVaultExport = false
+    @State private var vaultExportDocument = MarkdownExportDocument()
+    @State private var showVaultFolderExport = false
+    @State private var vaultFolderExportDocument = VaultFolderExportDocument()
+    @State private var showMarkdownImport = false
+    @State private var importError: String?
 
     #if DEBUG
     @State private var showDeveloperSettings = false
@@ -75,6 +83,66 @@ struct ContentView: View {
                 .help("Performance signposts and memory gauge")
             }
             #endif
+            ToolbarItem(placement: .automatic) {
+                Menu {
+                    Button {
+                        showGraph = true
+                    } label: {
+                        Label("Link Graph", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                    Button {
+                        prepareVaultExport()
+                    } label: {
+                        Label("Export Vault (Single File)…", systemImage: "doc.text")
+                    }
+                    Button {
+                        prepareVaultFolderExport()
+                    } label: {
+                        Label("Export Vault (Folder)…", systemImage: "square.and.arrow.up.on.square")
+                    }
+                    Button {
+                        showMarkdownImport = true
+                    } label: {
+                        Label("Import Markdown…", systemImage: "square.and.arrow.down")
+                    }
+                } label: {
+                    Label("Vault", systemImage: "archivebox")
+                }
+                .accessibilityLabel(AccessibilityLabels.vaultMenu)
+            }
+        }
+        .sheet(isPresented: $showGraph) {
+            WikiLinkGraphView(store: store, selectedNoteID: $selectedNoteID)
+                #if os(macOS)
+                .frame(minWidth: 640, minHeight: 520)
+                #endif
+        }
+        .fileExporter(
+            isPresented: $showVaultExport,
+            document: vaultExportDocument,
+            contentType: .plainText,
+            defaultFilename: "vault-export.md"
+        ) { result in
+            if case .failure(let error) = result {
+                importError = error.localizedDescription
+            }
+        }
+        .fileExporter(
+            isPresented: $showVaultFolderExport,
+            document: vaultFolderExportDocument,
+            contentType: .folder,
+            defaultFilename: "vault-export"
+        ) { result in
+            if case .failure(let error) = result {
+                importError = error.localizedDescription
+            }
+        }
+        .fileImporter(
+            isPresented: $showMarkdownImport,
+            allowedContentTypes: [.plainText],
+            allowsMultipleSelection: true
+        ) { result in
+            importMarkdownFiles(result)
         }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView(isPresented: $showOnboarding)
@@ -104,6 +172,14 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(recoveryError ?? "")
+        }
+        .alert("Import Error", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
         }
         .onChange(of: store.needsDatabaseRecovery) { _, needs in
             showRecoveryAlert = needs
@@ -288,10 +364,52 @@ struct ContentView: View {
     }
 
     static var shouldShowOnboarding: Bool {
-        if ProcessInfo.processInfo.arguments.contains("-skipOnboarding") {
+        if LaunchArguments.skipOnboarding || LaunchArguments.benchmarkColdLaunch {
             return false
         }
         return !UserDefaults.standard.bool(forKey: OnboardingKeys.hasSeenOnboarding)
+    }
+
+    private func prepareVaultExport() {
+        do {
+            let markdown = try store.exportVaultAsCombinedMarkdown()
+            vaultExportDocument = MarkdownExportDocument(text: markdown)
+            showVaultExport = true
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func prepareVaultFolderExport() {
+        do {
+            let wrapper = try store.makeVaultMarkdownExportWrapper()
+            vaultFolderExportDocument = VaultFolderExportDocument(wrapper: wrapper)
+            showVaultFolderExport = true
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func importMarkdownFiles(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            importError = error.localizedDescription
+        case .success(let urls):
+            do {
+                for url in urls {
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    if url.hasDirectoryPath {
+                        _ = try store.importMarkdownDirectory(from: url)
+                    } else {
+                        _ = try store.importMarkdownFile(from: url)
+                    }
+                }
+                try store.flushPackageIfNeeded()
+            } catch {
+                importError = error.localizedDescription
+            }
+        }
     }
 }
 

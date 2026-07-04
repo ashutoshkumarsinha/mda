@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<package>
+    <id>name.aks.mde.performance</id>
+    <version>1.0</version>
+    <title>MDE Performance</title>
+    <owner>
+        <name>MDE</name>
+    </owner>
+
+    <!-- Vault / store signposts (subsystem name.aks.mde, category Performance) -->
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-cold_launch_to_editor</id>
+        <title>cold_launch_to_editor</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"cold_launch_to_editor"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <title>vault_refresh_all</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_refresh_all"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_reload_notes</id>
+        <title>vault_reload_notes</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_reload_notes"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_reload_tag_tree</id>
+        <title>vault_reload_tag_tree</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_reload_tag_tree"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_resolve_links</id>
+        <title>vault_resolve_links</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_resolve_links"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_update_note</id>
+        <title>vault_update_note</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_update_note"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_persist_package</id>
+        <title>vault_persist_package</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_persist_package"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_export_database</id>
+        <title>vault_export_database</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_export_database"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-vault_list_page</id>
+        <title>vault_list_page</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"vault_list_page"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <!-- Markdown editor signposts -->
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-markdown_parse</id>
+        <title>markdown_parse</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"markdown_parse"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-markdown_style</id>
+        <title>markdown_style</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"markdown_style"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-markdown_style_incremental</id>
+        <title>markdown_style_incremental</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"markdown_style_incremental"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+    <!-- Sync signposts -->
+
+    <os-signpost-interval-schema>
+        <id>mde-schema-sync_perform</id>
+        <title>sync_perform</title>
+        <subsystem>"name.aks.mde"</subsystem>
+        <category>"Performance"</category>
+        <name>"sync_perform"</name>
+        <duration-column>
+            <mnemonic>duration</mnemonic>
+            <title>Duration</title>
+            <type>duration</type>
+        </duration-column>
+    </os-signpost-interval-schema>
+
+  <instrument>
+        <id>name.aks.mde.signposts</id>
+        <title>MDE Signposts</title>
+        <category>Performance</category>
+        <purpose>Interval durations for MDE vault, editor, and sync signposts</purpose>
+        <icon>Time</icon>
+
+        <create-table>
+            <id>mde-table-vault_refresh_all</id>
+            <schema-ref>mde-schema-vault_refresh_all</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_reload_notes</id>
+            <schema-ref>mde-schema-vault_reload_notes</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_reload_tag_tree</id>
+            <schema-ref>mde-schema-vault_reload_tag_tree</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_resolve_links</id>
+            <schema-ref>mde-schema-vault_resolve_links</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_update_note</id>
+            <schema-ref>mde-schema-vault_update_note</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_persist_package</id>
+            <schema-ref>mde-schema-vault_persist_package</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_export_database</id>
+            <schema-ref>mde-schema-vault_export_database</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-vault_list_page</id>
+            <schema-ref>mde-schema-vault_list_page</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-markdown_parse</id>
+            <schema-ref>mde-schema-markdown_parse</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-markdown_style</id>
+            <schema-ref>mde-schema-markdown_style</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-markdown_style_incremental</id>
+            <schema-ref>mde-schema-markdown_style_incremental</schema-ref>
+        </create-table>
+        <create-table>
+            <id>mde-table-sync_perform</id>
+            <schema-ref>mde-schema-sync_perform</schema-ref>
+        </create-table>
+
+        <graph>
+            <title>Vault</title>
+            <lane>
+                <title>vault_refresh_all</title>
+                <table-ref>mde-table-vault_refresh_all</table-ref>
+            </lane>
+            <lane>
+                <title>vault_update_note</title>
+                <table-ref>mde-table-vault_update_note</table-ref>
+            </lane>
+            <lane>
+                <title>vault_persist_package</title>
+                <table-ref>mde-table-vault_persist_package</table-ref>
+            </lane>
+            <lane>
+                <title>vault_list_page</title>
+                <table-ref>mde-table-vault_list_page</table-ref>
+            </lane>
+        </graph>
+
+        <graph>
+            <title>Markdown</title>
+            <lane>
+                <title>markdown_parse</title>
+                <table-ref>mde-table-markdown_parse</table-ref>
+            </lane>
+            <lane>
+                <title>markdown_style</title>
+                <table-ref>mde-table-markdown_style</table-ref>
+            </lane>
+            <lane>
+                <title>markdown_style_incremental</title>
+                <table-ref>mde-table-markdown_style_incremental</table-ref>
+            </lane>
+        </graph>
+
+        <graph>
+            <title>Sync</title>
+            <lane>
+                <title>sync_perform</title>
+                <table-ref>mde-table-sync_perform</table-ref>
+            </lane>
+        </graph>
+
+        <list>
+            <title>vault_refresh_all</title>
+            <table-ref>mde-table-vault_refresh_all</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_reload_notes</title>
+            <table-ref>mde-table-vault_reload_notes</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_reload_tag_tree</title>
+            <table-ref>mde-table-vault_reload_tag_tree</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_resolve_links</title>
+            <table-ref>mde-table-vault_resolve_links</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_update_note</title>
+            <table-ref>mde-table-vault_update_note</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_persist_package</title>
+            <table-ref>mde-table-vault_persist_package</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_export_database</title>
+            <table-ref>mde-table-vault_export_database</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>vault_list_page</title>
+            <table-ref>mde-table-vault_list_page</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>markdown_parse</title>
+            <table-ref>mde-table-markdown_parse</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>markdown_style</title>
+            <table-ref>mde-table-markdown_style</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>markdown_style_incremental</title>
+            <table-ref>mde-table-markdown_style_incremental</table-ref>
+            <column>duration</column>
+        </list>
+        <list>
+            <title>sync_perform</title>
+            <table-ref>mde-table-sync_perform</table-ref>
+            <column>duration</column>
+        </list>
+    </instrument>
+
+    <template>MDE Performance.tracetemplate</template>
+</package>

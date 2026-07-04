@@ -19,6 +19,7 @@ enum PerformanceSignpost {
     case markdownStyle
     case markdownStyleIncremental
     case syncPerform
+    case coldLaunchToEditor
 
     var name: StaticString {
         switch self {
@@ -34,6 +35,7 @@ enum PerformanceSignpost {
         case .markdownStyle: "markdown_style"
         case .markdownStyleIncremental: "markdown_style_incremental"
         case .syncPerform: "sync_perform"
+        case .coldLaunchToEditor: "cold_launch_to_editor"
         }
     }
 
@@ -51,6 +53,7 @@ enum PerformanceSignpost {
         case .markdownStyle: "markdown_style"
         case .markdownStyleIncremental: "markdown_style_incremental"
         case .syncPerform: "sync_perform"
+        case .coldLaunchToEditor: "cold_launch_to_editor"
         }
     }
 

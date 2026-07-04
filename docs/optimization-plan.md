@@ -33,7 +33,7 @@ Establish budgets before changing behavior. View signposts in **Instruments → 
 | `markdownStylePassMS` | 100 ms | NFR-01 (full pass / reduce motion) |
 | `incrementalMarkdownStyleMS` | 16 ms | NFR-01 (caret neighborhood) |
 | `markdownParseMS` | 300 ms | NFR-01 |
-| `coldVaultOpenMS` | 2,000 ms | NFR-02 (in-process proxy) |
+| `coldVaultOpenMS` | 2,000 ms | NFR-02 (in-process proxy in `mdeTests`; true launch via `benchmark-cold-launch.sh`) |
 | `memoryDelta1kNotesMB` | 120 MB | NFR-03 (test-host delta) |
 | `refreshAll1kNotesMS` | 2,000 ms | Phase 0 capture |
 | `updateNote1kVaultMS` | 1,000 ms | Autosave path |
@@ -178,12 +178,37 @@ Run: `xcodebuild -only-testing:mdeTests/Phase7EnhancementTests test`
 
 ---
 
+## Gap closure ✅
+
+| Item | Status |
+|------|--------|
+| Trash note preview in editor | `fetchListItem` + read-only trash banner |
+| List reload on body-only edit | `listRevision` skips when title/snippet/pin unchanged |
+| Code fences & blockquotes | `MarkdownConstruct` + `MarkdownStyler` |
+| Full vault export | `exportVaultAsCombinedMarkdown()` + single-file & folder Vault menu |
+| Markdown import | `importMarkdownFile` / `importMarkdownDirectory` |
+| Link graph UI | `WikiLinkGraphView` v2 — force-directed layout, pan/zoom, focus, unresolved nodes |
+| `MarkdownTokenTextStorage` | macOS editor uses hybrid `NSTextStorage` path |
+| Persisted perf baselines | `performance-baselines.json` + `PerformanceRegressionGate` |
+| Instruments trace template | `docs/instruments/MDE Performance.tracetemplate` + `record-mde-profile.sh` |
+| True cold-launch benchmark | `benchmark-cold-launch.sh` + `cold_launch_to_editor` signpost |
+| 10% regression CI gate | `PerformanceRegressionGate` + `CompletionTests` |
+| iOS UITests in CI | `mdeUITests` job on simulator (launch, scroll, vault menu) |
+
+### Tests (`CompletionTests`)
+
+Run: `xcodebuild -only-testing:mdeTests/CompletionTests test`
+
+---
+
 ## Revision history
 
 | Date | Change |
 |------|--------|
+| 2026-07-03 | Gap closure: import/export vault, graph, markdown constructs, trash preview, regression gate |
 | 2026-07-03 | Phase 7: trash purge UI, note export, focused list filter, on-demand backlinks |
-| 2026-07-03 | Phase 3: incremental editor styling, parse cache, iOS textStorage path |
+| 2026-07-03 | Phase 6: p95 style gate, NFR-03 memory ceiling, persist size regression, DEBUG developer overlay, iOS CI smoke |
+| 2026-07-03 | Phase 5: granular observation, equatable rows, deferred sync, iOS compact ZStack, editor Dynamic Type cap |
 | 2026-07-03 | Phase 2: WAL/pragmas, list index, pagination, lifecycle flush, migration backup policy |
 | 2026-07-03 | Phase 1: incremental vault cache, list summaries, debounced search, coalesced persist |
 | 2026-07-03 | Phase 0: signposts, budgets, baseline tests, memory probe |

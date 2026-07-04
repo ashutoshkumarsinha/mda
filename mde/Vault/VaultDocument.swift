@@ -17,10 +17,12 @@ final class VaultDocument: ReferenceFileDocument, ObservableObject {
 
     init() {
         store = VaultStore()
+        ColdLaunchBenchmark.beginIfNeeded()
     }
 
     required init(configuration: ReadConfiguration) throws {
         store = VaultStore()
+        ColdLaunchBenchmark.beginIfNeeded()
         try store.load(from: configuration.file)
     }
 

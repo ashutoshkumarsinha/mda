@@ -64,7 +64,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Native Swift, no Electron | ✓ | ✓ | ✗ |
 | Folderless nested tags | ✓ | ✗ | ✓ |
 | E2E encrypted Apple sync | ✓ | ✗ | Plugin |
-| Full graph visualization | ✗ (backlinks only) | ✗ | ✓ |
+| Full graph visualization | ✓ (force layout, pan/zoom) | ✗ | ✓ |
 
 ---
 
@@ -102,11 +102,11 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 
 ### 4.2 v1 scope boundaries
 
-| In v1 | v1.1 | v2+ |
+| In v1 | v1.1 *(shipped in optimization Phase 7)* | v2+ |
 |-------|------|-----|
-| Note CRUD, tags, WikiLinks, FTS | Export single note as `.md` | Full vault export |
-| Backlinks panel | Multi-window macOS | Graph visualization |
-| CloudKit sync + encryption | Soft-delete purge UI | Import Obsidian/Notion |
+| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault combined export | Per-note vault folder export zip |
+| Backlinks panel (on-demand) | Multi-window macOS (DocumentGroup native) | Full graph visualization (force layout, pan/zoom, focus) |
+| CloudKit sync + encryption | Soft-delete purge UI, Markdown import | Import Obsidian/Notion folders |
 | Hybrid editor (headers–checkboxes) | Code fences, blockquotes | Images, tables, plugins |
 
 ### 4.3 Non-goals
@@ -202,7 +202,7 @@ MyVault.mde/
 | FR-D02 | Autosave vault within 2 s of last edit (debounced) | MUST |
 | FR-D03 | One active vault per window; no cross-vault links in v1 | MUST |
 | FR-D04 | Corrupt DB → offer recovery from last autosave snapshot | SHOULD |
-| FR-D05 | Export single note as `.md` file | v1.1 |
+| FR-D05 | Export single note as `.md` file | v1.1 ✅ |
 
 ---
 
@@ -388,7 +388,7 @@ stateDiagram-v2
 |-------|-----------|
 | iCloud | Required for sync; app fully usable without account |
 | Transit | TLS (CloudKit) + AES-GCM payload |
-| At rest (local) | File-system encryption via macOS/iOS; vault DB plaintext until Phase 3 enables optional SQLCipher-style layer |
+| At rest (local) | SQLCipher (AES-256) for `notes.db`; per-vault key in Keychain (`name.aks.mde.database`) |
 | Key storage | Keychain; no iCloud Keychain sync v1 |
 | Key recovery | None v1 — user warned during sync setup |
 | Deletion | Soft delete immediate; hard purge v1.1 |
@@ -606,7 +606,7 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 | # | Question | Owner | Target | Notes |
 |---|----------|-------|--------|-------|
 | OQ-01 | CRDT library vs custom deltas | Engineering | Phase 3 | LWW fallback acceptable for v1 launch if needed |
-| OQ-02 | Local DB encryption at rest | Engineering | Phase 3 | File-system encryption may suffice v1 |
+| OQ-02 | Local DB encryption at rest | Engineering | Phase 3 | **Resolved** — SQLCipher via `Packages/GRDBCipher` + Keychain per-vault keys |
 | OQ-03 | Multi-window macOS | Product | v1.1 | — |
 
 **Resolved:** tag filter → subtree inclusive · vault format → `.mde` package · merge UX → primary + append · FTS5 rowid → integer · Xcode rename → `mde`

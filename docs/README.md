@@ -9,6 +9,7 @@ Documentation for **MDE** — a local-first, minimalist note-taking app for macO
 | [**spec.md**](./spec.md) | Requirements, syntax rules, UX behavior, test scenarios, delivery phases |
 | [**hld.md**](./hld.md) | Architecture, data flows, database schema, SQL recipes, GUI wireframes |
 | [**optimization-plan.md**](./optimization-plan.md) | Performance phases, NFR budgets, signposts, Phase 0 baselines |
+| [**instruments/**](./instruments/) | Stored **MDE Performance** trace template + `record-mde-profile.sh` |
 
 ```
 spec.md  ──  WHAT   (requirements, syntax, tests, milestones)
@@ -30,7 +31,9 @@ CI builds with `CODE_SIGNING_ALLOWED=NO` and do not need a team.
 
 ## Project status
 
-**v1 complete** — all delivery phases (0–4) implemented. See [spec §13](./spec.md#13-delivery-phases).
+**v1 complete** — delivery phases 0–4 and optimization phases 0–7 implemented. See [spec §13](./spec.md#13-delivery-phases) and [optimization-plan.md](./optimization-plan.md).
+
+Open **`mde.xcodeproj`** — the app sources live in **`mde/`**.
 
 ## Quick reference
 

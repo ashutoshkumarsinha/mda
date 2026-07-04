@@ -12,6 +12,7 @@ struct VaultMeta: Codable, Equatable, Sendable {
     var syncEnabled: Bool
     var lastSyncedAt: Date?
     var cloudChangeTokenBase64: String?
+    var databaseEncrypted: Bool
 
     enum CodingKeys: String, CodingKey {
         case formatVersion = "format_version"
@@ -20,6 +21,7 @@ struct VaultMeta: Codable, Equatable, Sendable {
         case syncEnabled = "sync_enabled"
         case lastSyncedAt = "last_synced_at"
         case cloudChangeTokenBase64 = "cloud_change_token"
+        case databaseEncrypted = "database_encrypted"
     }
 
     var cloudChangeToken: Data? {
@@ -38,14 +40,16 @@ struct VaultMeta: Codable, Equatable, Sendable {
         createdAt: Date,
         syncEnabled: Bool = false,
         lastSyncedAt: Date? = nil,
-        cloudChangeToken: Data? = nil
+        cloudChangeToken: Data? = nil,
+        databaseEncrypted: Bool = true
     ) {
         self.formatVersion = formatVersion
         self.vaultID = vaultID
         self.createdAt = createdAt
         self.syncEnabled = syncEnabled
         self.lastSyncedAt = lastSyncedAt
-        self.cloudChangeToken = cloudChangeToken
+        self.cloudChangeTokenBase64 = cloudChangeToken?.base64EncodedString()
+        self.databaseEncrypted = databaseEncrypted
     }
 
     init(from decoder: Decoder) throws {
@@ -56,6 +60,7 @@ struct VaultMeta: Codable, Equatable, Sendable {
         syncEnabled = try container.decodeIfPresent(Bool.self, forKey: .syncEnabled) ?? false
         lastSyncedAt = try container.decodeIfPresent(Date.self, forKey: .lastSyncedAt)
         cloudChangeTokenBase64 = try container.decodeIfPresent(String.self, forKey: .cloudChangeTokenBase64)
+        databaseEncrypted = try container.decodeIfPresent(Bool.self, forKey: .databaseEncrypted) ?? false
     }
 
     static func makeNew() -> VaultMeta {

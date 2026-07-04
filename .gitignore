@@ -5,3 +5,17 @@ mde/Config/Local.xcconfig
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# Local GRDB+SQLCipher vendor tree (see scripts/setup-grdb-cipher.sh)
+Packages/GRDBCipher/GRDB/
+Packages/GRDBCipher/Sources/
+Packages/GRDBCipher/Tests/
+Packages/GRDBCipher/Documentation/
+Packages/GRDBCipher/Support/
+Packages/GRDBCipher/SQLiteCustom/
+Packages/GRDBCipher/*.xcodeproj/
+Packages/GRDBCipher/*.xcworkspace/
+Packages/GRDBCipher/*.podspec
+Packages/GRDBCipher/*.png
+Packages/GRDBCipher/*.md
+!Packages/GRDBCipher/README.md

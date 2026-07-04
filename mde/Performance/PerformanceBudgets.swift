@@ -15,7 +15,7 @@ enum PerformanceBudgets {
     static let incrementalMarkdownStyleMS: Double = 16
     static let markdownParseMS: Double = 300
 
-    // NFR-02 (in-process proxy; full launch needs Instruments)
+    // NFR-02 — in-process proxy in unit tests; true process launch via docs/instruments/benchmark-cold-launch.sh
     static let coldVaultOpenMS: Double = 2_000
 
     // NFR-03 (resident memory delta in test host after 1k-note cache load)

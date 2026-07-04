@@ -9,6 +9,7 @@ Category: `Performance`
 
 | Signpost | When it fires |
 |----------|----------------|
+| `cold_launch_to_editor` | `ColdLaunchBenchmark` → editor note loaded (NFR-02) |
 | `vault_refresh_all` | Full vault cache reload |
 | `vault_reload_notes` | Note summary reload |
 | `vault_reload_tag_tree` | Tag tree rebuild |
@@ -22,13 +23,61 @@ Category: `Performance`
 | `markdown_style_incremental` | Caret-neighborhood styling |
 | `sync_perform` | `SyncCoordinator.performSync` |
 
-## Quick profile (macOS)
+## Stored trace template
+
+Repo assets live in [instruments/](./instruments/):
+
+| Asset | Description |
+|-------|-------------|
+| `MDE Performance.tracetemplate` | Trace template for **Time Profiler** + **os_signpost** |
+| `record-mde-profile.sh` | Build, record, and open a trace from the CLI |
+| `benchmark-cold-launch.sh` | True cold-launch benchmark (NFR-02, median of N traces) |
+| `parse-cold-launch-trace.py` | Extract `cold_launch_to_editor` duration from a `.trace` |
+| `install-mde-instruments-template.sh` | Install template into Instruments (shows as **MDE Performance**) |
+| `MDEPerformance.instrpkg` | Optional Instruments Package source for per-signpost duration lanes |
+
+### CLI recording
+
+```bash
+./docs/instruments/install-mde-instruments-template.sh   # once per machine
+./docs/instruments/record-mde-profile.sh ~/Desktop/mde.trace
+```
+
+`TIME_LIMIT=60s` overrides the default 30s capture window.
+
+### True cold launch (NFR-02)
+
+Out-of-process benchmark (not the in-test `VaultStore()` proxy):
+
+```bash
+./docs/instruments/benchmark-cold-launch.sh
+```
+
+The script quits any running **mde**, starts an **xctrace** recording (`Time Profiler` + **os_signpost**, all processes), cold-launches a fresh instance via `open -n` with `-benchmarkColdLaunch` and a prepared `.mde` vault, then reads the `cold_launch_to_editor` duration from the app-written result file (`.ms`). Traces are saved under `OUTPUT_DIR` for optional inspection. The script exits non-zero when the **median** duration exceeds `coldVaultOpenMS` × 1.10.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `ITERATIONS` | `3` | Recorded cold launches |
+| `BUDGET_MS` | `2000` | NFR-02 budget |
+| `TIME_LIMIT` | `15s` | Max Instruments capture per iteration |
+| `VAULT_PATH` | — | Optional `.mde` package (default: generated under `OUTPUT_DIR`) |
+| `OUTPUT_DIR` | `build/cold-launch` | Traces, `.ms` results, `cold-launch-results.json` |
+
+### Manual profile (macOS)
 
 1. Open `mde.xcodeproj` and select the **mde** scheme.
-2. **Product → Profile** (⌘I) to launch Instruments.
-3. Choose **os_signpost** (or **Time Profiler** + signpost detail).
-4. Filter subsystem to `name.aks.mde`.
+2. **Product → Profile** (⌘I), or run `install-mde-instruments-template.sh` and choose **MDE Performance**.
+3. Ensure **Time Profiler** and **os_signpost** are in the template.
+4. In **os_signpost**, filter subsystem `name.aks.mde`, category `Performance`.
 5. Reproduce: cold open, type in editor, search 10k notes, sync.
+
+## Quick profile (legacy steps)
+
+If you prefer Apple's built-in templates instead of the stored file:
+
+1. **Product → Profile** (⌘I).
+2. Choose **os_signpost** (or **Time Profiler** + signpost detail).
+3. Filter subsystem to `name.aks.mde`.
 
 ## DEBUG in-app overlay
 
@@ -61,6 +110,14 @@ Run only Phase 6 gates:
 xcodebuild -scheme mde -destination 'platform=macOS' \
   -only-testing:mdeTests/Phase6ObservabilityTests test CODE_SIGNING_ALLOWED=NO
 ```
+
+## Regression tolerance
+
+`PerformanceRegressionGate` allows metrics up to **max(budget, recorded baseline) × 1.10** (10% headroom). Recorded values live in `mde/Performance/performance-baselines.json` and are updated when intentional perf work lands. `CompletionTests` and CI enforce this alongside fixed budgets in `PerformanceBudgets.swift`.
+
+## macOS multi-window
+
+`DocumentGroup` supports **Window → New Window** for a second view of the same vault (platform default). No extra code required.
 
 ## Budget reference
 

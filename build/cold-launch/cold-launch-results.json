@@ -1,0 +1,3 @@
+[
+  {"iteration": 1, "trace": "/Users/deeproot/xcode_app/mda/build/cold-launch/cold-launch-1.trace", "result_file": "/Users/deeproot/xcode_app/mda/build/cold-launch/cold-launch-1.ms", "cold_launch_to_editor_ms": 213.56, "status": "PASS"},
+  {"iteration": 2, "trace": "/Users/deeproot/xcode_app/mda/build/cold-launch/cold-launch-2.trace", "result_file": "/Users/deeproot/xcode_app/mda/build/cold-launch/cold-launch-2.ms", "cold_launch_to_editor_ms": 217.96, "status": "PASS"}]

@@ -1,0 +1,12 @@
+{
+  "metrics": {
+    "cold_vault_open_ms": 1800,
+    "cold_launch_to_editor_ms": 2000,
+    "list_page_focused_ms": 45,
+    "refresh_all_1k_notes_ms": 1800,
+    "markdown_style_pass_ms": 90,
+    "incremental_markdown_style_ms": 14,
+    "search_10k_notes_ms": 90,
+    "sync_round_trip_in_memory_ms": 2500
+  }
+}
