@@ -28,6 +28,14 @@ struct ContentView: View {
     @State private var vaultZipExportDocument = VaultZipExportDocument()
     @State private var showMarkdownImport = false
     @State private var importError: String?
+    @State private var importBannerMessage: String?
+    @State private var pendingPackageImport: PendingPackageImport?
+    @State private var showPackageImportSheet = false
+
+    private struct PendingPackageImport {
+        var url: URL
+        var isZip: Bool
+    }
 
     #if DEBUG
     @State private var showDeveloperSettings = false
@@ -54,6 +62,12 @@ struct ContentView: View {
                         Task { await syncCoordinator?.resolveConflict(keepLocal: false) }
                     }
                 )
+            }
+
+            if let importBannerMessage {
+                ImportBanner(message: importBannerMessage) {
+                    self.importBannerMessage = nil
+                }
             }
 
             #if os(iOS)
@@ -204,6 +218,22 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(importError ?? "")
+        }
+        .sheet(isPresented: $showPackageImportSheet) {
+            if let pending = pendingPackageImport {
+                PackageImportSheet(
+                    sourceDescription: pending.isZip
+                        ? pending.url.lastPathComponent
+                        : pending.url.lastPathComponent,
+                    onImport: { mode in
+                        performPackageImport(pending: pending, mode: mode)
+                    },
+                    onCancel: {
+                        pendingPackageImport = nil
+                        showPackageImportSheet = false
+                    }
+                )
+            }
         }
         .onChange(of: store.needsDatabaseRecovery) { _, needs in
             showRecoveryAlert = needs
@@ -447,13 +477,18 @@ struct ContentView: View {
                     let accessed = url.startAccessingSecurityScopedResource()
                     defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                     if url.pathExtension.lowercased() == "zip" {
-                        _ = try store.importExportZip(from: url)
-                    } else if url.hasDirectoryPath {
+                        pendingPackageImport = PendingPackageImport(url: url, isZip: true)
+                        showPackageImportSheet = true
+                        return
+                    }
+                    if url.hasDirectoryPath {
                         var isDirectory: ObjCBool = false
                         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
                            isDirectory.boolValue {
                             if VaultPackageImporter.isExportPackage(at: url) {
-                                _ = try store.importExportPackage(from: url)
+                                pendingPackageImport = PendingPackageImport(url: url, isZip: false)
+                                showPackageImportSheet = true
+                                return
                             } else {
                                 _ = try store.importObsidianDirectory(from: url)
                             }
@@ -469,6 +504,49 @@ struct ContentView: View {
                 importError = error.localizedDescription
             }
         }
+    }
+
+    private func performPackageImport(pending: PendingPackageImport, mode: VaultPackageImportMode) {
+        do {
+            let accessed = pending.url.startAccessingSecurityScopedResource()
+            defer { if accessed { pending.url.stopAccessingSecurityScopedResource() } }
+            let result: VaultPackageImportResult
+            if pending.isZip {
+                result = try store.importExportZip(from: pending.url, mode: mode)
+            } else {
+                result = try store.importExportPackage(from: pending.url, mode: mode)
+            }
+            if result.assetsSkipped {
+                importBannerMessage = "Images were not imported. Save the vault to a package on disk to include assets."
+            }
+            pendingPackageImport = nil
+            showPackageImportSheet = false
+            try store.flushPackageIfNeeded()
+        } catch {
+            importError = error.localizedDescription
+            pendingPackageImport = nil
+            showPackageImportSheet = false
+        }
+    }
+}
+
+private struct ImportBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.subheadline)
+            Spacer()
+            Button("Dismiss", action: onDismiss)
+                .buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.orange.opacity(0.12))
     }
 }
 

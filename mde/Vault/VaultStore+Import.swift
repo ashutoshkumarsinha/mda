@@ -45,12 +45,20 @@ extension VaultStore {
     }
 
     /// Imports a v2.3 export folder (`meta.json`, `notes/`, `assets/`).
-    func importExportPackage(from rootURL: URL) throws -> [Note] {
-        try VaultPackageImporter.importPackage(at: rootURL, into: self)
+    @discardableResult
+    func importExportPackage(
+        from rootURL: URL,
+        mode: VaultPackageImportMode = .add
+    ) throws -> VaultPackageImportResult {
+        try VaultPackageImporter.importPackage(at: rootURL, into: self, mode: mode)
     }
 
     /// Extracts and imports a v2.3 `.zip` export.
-    func importExportZip(from zipURL: URL) throws -> [Note] {
+    @discardableResult
+    func importExportZip(
+        from zipURL: URL,
+        mode: VaultPackageImportMode = .add
+    ) throws -> VaultPackageImportResult {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("mde-import-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -58,7 +66,7 @@ extension VaultStore {
         guard VaultPackageImporter.isExportPackage(at: tempDir) else {
             throw VaultImportError.invalidZipArchive
         }
-        return try importExportPackage(from: tempDir)
+        return try importExportPackage(from: tempDir, mode: mode)
     }
 
     /// Recursively imports Markdown notes from a folder, skipping `.obsidian` and copying embedded images into vault assets.

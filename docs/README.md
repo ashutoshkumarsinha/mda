@@ -11,6 +11,7 @@ Documentation for **MDE** — a local-first, minimalist note-taking app for macO
 | [**optimization-plan.md**](./optimization-plan.md) | Performance phases, NFR budgets, signposts, Phase 0 baselines |
 | [**v2-roadmap.md**](./v2-roadmap.md) | v2 phases: images, tables, Obsidian import, zip export |
 | [**v3-roadmap.md**](./v3-roadmap.md) | v3 phases: package import, external links, WikiLink aliases |
+| [**v4-roadmap.md**](./v4-roadmap.md) | v4 phases: smart import, editor polish, capture UX |
 | [**instruments/**](./instruments/) | Stored **MDE Performance** trace template + `record-mde-profile.sh` |
 
 ```
@@ -33,7 +34,7 @@ CI builds with `CODE_SIGNING_ALLOWED=NO` and do not need a team.
 
 ## Project status
 
-**v1 + v1.1 + v2 + v3 complete** — see [v3-roadmap.md](./v3-roadmap.md) and [spec §13](./spec.md#13-delivery-phases).
+**v1 + v1.1 + v2 + v3 + v4 complete** — see [v4-roadmap.md](./v4-roadmap.md) and [spec §13](./spec.md#13-delivery-phases).
 
 **First-time setup:** run `./scripts/setup-grdb-cipher.sh` (vendors GRDB into `Packages/GRDBCipher/` for SQLCipher).
 

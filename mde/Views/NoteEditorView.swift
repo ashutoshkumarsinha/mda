@@ -264,8 +264,19 @@ struct NoteEditorView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(backlinks) { backlink in
-                                Button(store.noteDisplayTitle(backlink)) {
+                                Button {
                                     selectedNoteID = backlink.id
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(store.noteDisplayTitle(backlink))
+                                            .font(.caption.weight(.medium))
+                                        if !backlink.snippet.isEmpty {
+                                            Text(backlink.snippet)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)

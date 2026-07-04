@@ -303,10 +303,10 @@ final class VaultStore {
     // MARK: - Notes
 
     @discardableResult
-    func createNote(title: String = "", content: String = "") throws -> Note {
+    func createNote(id: String? = nil, title: String = "", content: String = "") throws -> Note {
         guard let dbQueue else { throw VaultError.databaseUnavailable }
 
-        var note = Note(title: title, content: content)
+        var note = Note(id: id ?? UUID().uuidString, title: title, content: content)
         if note.title.isEmpty {
             note.title = TitleDeriver.derive(from: content, existingTitles: titleStrings())
         }
@@ -319,6 +319,7 @@ final class VaultStore {
             try LinkIndexer.reindexLinks(for: note.id, content: note.content, in: db)
         }
         try applyNoteChanged(note, previousContent: nil)
+        try rebuildNoteAssetLinks(noteID: note.id, content: note.content)
         noteChanged(note.id)
         return note
     }
@@ -454,11 +455,12 @@ final class VaultStore {
         offset: Int,
         limit: Int = listPageSize,
         tagPath: String?,
-        scope: NoteListScope = .all
+        scope: NoteListScope = .all,
+        sort: NoteListSort = .updated
     ) throws -> [NoteListItem] {
         guard let dbQueue else { return [] }
         return try dbQueue.read { db in
-            try fetchNoteSummariesPage(offset: offset, limit: limit, tagPath: tagPath, scope: scope, in: db)
+            try fetchNoteSummariesPage(offset: offset, limit: limit, tagPath: tagPath, scope: scope, sort: sort, in: db)
         }
     }
 
@@ -482,22 +484,38 @@ final class VaultStore {
         }
     }
 
-    func searchNotes(query: String) throws -> [SearchResult] {
+    func searchNotes(query: String, tagPath: String? = nil) throws -> [SearchResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let dbQueue, !trimmed.isEmpty else { return [] }
 
         let ftsQuery = Self.ftsQuery(from: trimmed)
         return try dbQueue.read { db in
-            let rows = try Row.fetchAll(db, sql: """
+            var sql = """
                 SELECT n.id, n.title, n.updated_at,
                        snippet(note_fts, 1, '==', '==', '...', 12) AS match_snippet
                 FROM note n
                 JOIN note_fts ON note_fts.rowid = n.rowid
                 WHERE note_fts MATCH ?
                   AND n.is_deleted = 0
+            """
+            var arguments: [DatabaseValueConvertible] = [ftsQuery]
+            if let tagPath {
+                sql += """
+                  AND n.id IN (
+                    SELECT nt.note_id
+                    FROM note_tag nt
+                    JOIN tag t ON t.id = nt.tag_id
+                    WHERE t.path = ? OR t.path LIKE ?
+                  )
+                """
+                arguments.append(tagPath)
+                arguments.append("\(tagPath)/%")
+            }
+            sql += """
                 ORDER BY rank
                 LIMIT 50
-            """, arguments: [ftsQuery])
+            """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
 
             return rows.map { row in
                 SearchResult(
@@ -1215,6 +1233,88 @@ final class VaultStore {
                 }
             }
             return try Data(contentsOf: url)
+        }
+    }
+
+    // MARK: - Package import (v4)
+
+    func upsertNoteFromImport(id: String, title: String, content: String) throws -> Note {
+        if let existing = try fetchNote(id: id, includeDeleted: true) {
+            if existing.isDeleted {
+                try restoreNote(id: id)
+            }
+            return try updateNoteFromImport(id: id, title: title, content: content)
+        }
+        return try createNote(id: id, title: title, content: content)
+    }
+
+    func updateNoteFromImport(id: String, title: String, content: String) throws -> Note {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+
+        let previous = try fetchNote(id: id)
+        var updated = try dbQueue.read { db in
+            guard var note = try Note.filter(Note.Columns.id == id).fetchOne(db) else {
+                throw VaultStoreError.noteNotFound
+            }
+            return note
+        }
+
+        updated.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? TitleDeriver.derive(from: content, existingTitles: titleStrings(excludingNoteID: id), excludingNoteID: id)
+            : title
+        updated.content = content
+        updated.updatedAt = Date()
+        updated.clientUpdatedAt = Date()
+        updated.version += 1
+        updated.isDeleted = false
+        try validateUniqueTitle(updated.title, excludingNoteID: id)
+        updated.checksum = SyncChecksum.compute(for: updated)
+
+        try dbQueue.write { db in
+            try updated.update(db)
+            try NoteIndexer.reindexTags(for: id, content: content, in: db)
+            try LinkIndexer.reindexLinks(for: id, content: content, in: db)
+        }
+        try rebuildNoteAssetLinks(noteID: id, content: content)
+        try applyNoteChanged(updated, previousContent: previous?.content)
+        noteChanged(id)
+        return updated
+    }
+
+    func softDeleteAllActiveNotes() throws {
+        guard let dbQueue else { throw VaultError.databaseUnavailable }
+        let now = Date()
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                UPDATE note
+                SET is_deleted = 1, updated_at = ?, client_updated_at = ?, version = version + 1
+                WHERE is_deleted = 0
+                """,
+                arguments: [now, now]
+            )
+        }
+        try refreshAll()
+        listState.bumpRevision()
+    }
+
+    func rebuildNoteAssetLinks(noteID: String, content: String) throws {
+        let dbQueue = try requireDatabaseQueue()
+        try dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM note_asset WHERE note_id = ?", arguments: [noteID])
+            for reference in MarkdownImageExtractor.references(in: content) {
+                guard let asset = try VaultAsset
+                    .filter(VaultAsset.Columns.filename == reference.assetFilename)
+                    .fetchOne(db) else { continue }
+                var link = NoteAsset(noteID: noteID, assetID: asset.id, altText: reference.alt)
+                try link.insert(db)
+            }
+        }
+    }
+
+    func enqueueSyncForImportedNotes(_ notes: [Note]) throws {
+        for note in notes {
+            try enqueueSync(noteID: note.id)
         }
     }
 }

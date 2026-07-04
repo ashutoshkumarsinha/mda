@@ -127,6 +127,24 @@ struct MarkdownUITextView: UIViewRepresentable {
             scheduleStyleApply()
         }
 
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
+            guard let expanded = MarkdownEditorLogic.expandedDeletionRange(
+                for: range,
+                replacement: replacement,
+                in: textView.text
+            ) else {
+                return true
+            }
+            styleController.noteStyleApplicationBegan()
+            let updated = (textView.text as NSString).replacingCharacters(in: expanded, with: "")
+            textView.text = updated
+            text = updated
+            onTextChange(updated)
+            styleController.noteStyleApplicationEnded()
+            refreshAfterTextMutation(updated, caret: expanded.location)
+            return false
+        }
+
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let textView else { return }
             let point = gesture.location(in: textView)

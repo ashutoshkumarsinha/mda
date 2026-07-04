@@ -1807,11 +1807,33 @@ struct VaultPackageImportTests {
         defer { try? FileManager.default.removeItem(at: importDir) }
         try destino.attachToPackage(at: importDir)
 
-        let imported = try destino.importExportPackage(from: exportDir)
-        #expect(imported.count == 1)
-        #expect(imported[0].title == "Has image")
-        #expect(imported[0].content.contains("assets/"))
+        let result = try destino.importExportPackage(from: exportDir)
+        #expect(result.notes.count == 1)
+        #expect(result.notes[0].title == "Has image")
+        #expect(result.notes[0].content.contains("assets/"))
         #expect(VaultPackageImporter.isExportPackage(at: exportDir))
+    }
+
+    @Test func mergePreservesNoteIDs() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "Original", content: "Version 1")
+        let noteID = note.id
+
+        let exportDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: exportDir) }
+        let wrapper = try store.makeVaultPackageExportWrapper()
+        try wrapper.write(to: exportDir, options: .atomic, originalContentsURL: nil)
+
+        _ = try store.updateNote(id: noteID, content: "Version 2")
+
+        let mergeResult = try store.importExportPackage(from: exportDir, mode: .merge)
+        #expect(mergeResult.notes.count == 1)
+        #expect(mergeResult.notes[0].id == noteID)
+        #expect(mergeResult.notes[0].content.contains("Version 1"))
+
+        let fetched = try store.fetchNote(id: noteID)
+        #expect(fetched?.content.contains("Version 1") == true)
     }
 
     @Test func roundTripsZipExport() throws {
@@ -1824,10 +1846,31 @@ struct VaultPackageImportTests {
         defer { try? FileManager.default.removeItem(at: zipURL) }
 
         let dest = VaultStore()
-        let imported = try dest.importExportZip(from: zipURL)
-        #expect(imported.count == 1)
-        #expect(imported[0].title == "Zip Note")
-        #expect(imported[0].content == "Zip body")
+        let result = try dest.importExportZip(from: zipURL)
+        #expect(result.notes.count == 1)
+        #expect(result.notes[0].title == "Zip Note")
+        #expect(result.notes[0].content == "Zip body")
+    }
+}
+
+// MARK: - v4 editor constructs
+
+struct V4MarkdownConstructTests {
+
+    @Test func italicConstructParses() {
+        let constructs = MarkdownConstructScanner.constructs(in: "See *emphasis* here")
+        #expect(constructs.contains { $0.kind == .italic })
+    }
+
+    @Test func linkDeletionExpandsToFullRange() {
+        let text = "Read [[Target]] and [site](https://example.com) now"
+        let wikiRange = NSRange(location: 5, length: 1)
+        let expandedWiki = MarkdownEditorLogic.expandedDeletionRange(for: wikiRange, replacement: "", in: text)
+        #expect(expandedWiki?.length == 10)
+
+        let linkRange = NSRange(location: 20, length: 1)
+        let expandedLink = MarkdownEditorLogic.expandedDeletionRange(for: linkRange, replacement: "", in: text)
+        #expect(expandedLink != nil)
     }
 }
 

@@ -25,6 +25,13 @@ struct SyncStatusToolbarContent: View {
                 }
                 .disabled(coordinator.status == .syncing)
                 .accessibilityLabel("Sync now")
+                Button {
+                    showSetup = true
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .help("Sync conflict history")
+                .accessibilityLabel("Sync conflict history")
             } else {
                 Button("Enable iCloud Sync") {
                     showSetup = true
@@ -90,29 +97,58 @@ struct SyncSetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Enable iCloud Sync")
-                .font(.title2.weight(.semibold))
+            if coordinator.isSyncEnabled {
+                Text("iCloud Sync")
+                    .font(.title2.weight(.semibold))
 
-            Text("Notes are encrypted on this device before upload. The encryption key stays in your Keychain and is not synced — if you lose this device without a local backup, synced notes cannot be recovered.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) {
-                    isPresented = false
-                }
-                Button("Enable Sync") {
-                    Task {
-                        do {
-                            try await coordinator.enableSync()
-                            isPresented = false
-                        } catch {
-                            errorMessage = error.localizedDescription
+                let entries = coordinator.conflictLogEntries()
+                if entries.isEmpty {
+                    Text("No sync conflicts recorded for this vault.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Recent conflicts")
+                        .font(.headline)
+                    ForEach(entries) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.noteTitle.isEmpty ? "Untitled" : entry.noteTitle)
+                                .font(.subheadline.weight(.medium))
+                            Text(entry.recordedAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                .keyboardShortcut(.defaultAction)
+
+                HStack {
+                    Spacer()
+                    Button("Done") { isPresented = false }
+                        .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                Text("Enable iCloud Sync")
+                    .font(.title2.weight(.semibold))
+
+                Text("Notes are encrypted on this device before upload. The encryption key stays in your Keychain and is not synced — if you lose this device without a local backup, synced notes cannot be recovered.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Spacer()
+                    Button("Cancel", role: .cancel) {
+                        isPresented = false
+                    }
+                    Button("Enable Sync") {
+                        Task {
+                            do {
+                                try await coordinator.enableSync()
+                                isPresented = false
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(24)

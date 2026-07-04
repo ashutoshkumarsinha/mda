@@ -13,6 +13,7 @@ struct NoteListView: View {
     let tagPath: String?
 
     @State private var listScope: NoteListScope = .focused
+    @State private var listSort: NoteListSort = .updated
     @State private var displayedRows: [NoteListRow] = []
     @State private var totalNoteCount = 0
     @State private var loadedNoteCount = VaultStore.listPageSize
@@ -106,12 +107,38 @@ struct NoteListView: View {
 
             if !isTrashView {
                 ToolbarItem {
-                    Button(action: addNote) {
+                    Menu {
+                        Button("Blank Note", action: addNote)
+                        Divider()
+                        ForEach(NoteTemplate.allCases.filter { $0 != .blank }) { template in
+                            Button {
+                                createNote(from: template)
+                            } label: {
+                                Label(template.rawValue, systemImage: template.systemImage)
+                            }
+                        }
+                    } label: {
                         Label("New Note", systemImage: "plus")
                     }
                     .keyboardShortcut("n", modifiers: .command)
                     .accessibilityLabel("New note")
                     .help("Create a new note")
+                }
+
+                ToolbarItem {
+                    Menu {
+                        ForEach(NoteListSort.allCases) { sort in
+                            Button {
+                                listSort = sort
+                                reload(resetLoadedWindow: true)
+                            } label: {
+                                Label(sort.rawValue, systemImage: sort.systemImage)
+                            }
+                        }
+                    } label: {
+                        Label(listSort.rawValue, systemImage: listSort.systemImage)
+                    }
+                    .accessibilityLabel("Sort notes")
                 }
             }
 
@@ -132,6 +159,11 @@ struct NoteListView: View {
         .onChange(of: listState.revision) { _, _ in reload(resetLoadedWindow: false) }
         .onChange(of: searchQuery) { _, newValue in
             scheduleSearch(query: newValue)
+        }
+        .background {
+            Button("") { addNote() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .hidden()
         }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
@@ -277,7 +309,8 @@ struct NoteListView: View {
                 offset: 0,
                 limit: limit,
                 tagPath: tagPath,
-                scope: listScope
+                scope: listScope,
+                sort: listSort
             )
             displayedRows = page.map { NoteListRow(item: $0, store: store) }
             totalNoteCount = try store.noteCountFiltered(by: tagPath, scope: listScope)
@@ -303,7 +336,8 @@ struct NoteListView: View {
                 offset: displayedRows.count,
                 limit: VaultStore.listPageSize,
                 tagPath: tagPath,
-                scope: listScope
+                scope: listScope,
+                sort: listSort
             )
             displayedRows.append(contentsOf: next.map { NoteListRow(item: $0, store: store) })
             loadedNoteCount = displayedRows.count
@@ -330,7 +364,7 @@ struct NoteListView: View {
 
     private func performSearch(query: String) {
         do {
-            searchResults = try store.searchNotes(query: query)
+            searchResults = try store.searchNotes(query: query, tagPath: tagPath)
             if let first = searchResults.first {
                 selectedNoteID = first.id
             }
@@ -364,8 +398,12 @@ struct NoteListView: View {
     }
 
     private func addNote() {
+        createNote(from: .blank)
+    }
+
+    private func createNote(from template: NoteTemplate) {
         do {
-            let note = try store.createNote()
+            let note = try store.createNote(content: template.content)
             selectedNoteID = note.id
             try store.flushPackageIfNeeded()
         } catch {

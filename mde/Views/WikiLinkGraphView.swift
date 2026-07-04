@@ -11,6 +11,7 @@ struct WikiLinkGraphView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var graphSearchText = ""
     @State private var rawNodes: [WikiGraphNode] = []
     @State private var rawEdges: [WikiGraphEdge] = []
     @State private var layoutResult = WikiGraphLayoutResult(nodes: [], edges: [])
@@ -26,11 +27,20 @@ struct WikiLinkGraphView: View {
     @State private var errorMessage: String?
 
     private var displayGraph: WikiGraphLayoutResult {
-        WikiGraphLayoutEngine.visibleGraph(
+        let base = WikiGraphLayoutEngine.visibleGraph(
             result: layoutResult,
             focusNodeID: selectedNoteID,
             focusEnabled: focusNeighbors
         )
+        let trimmed = graphSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return base }
+        let lowered = trimmed.lowercased()
+        let matchingIDs = Set(base.nodes.filter { $0.title.lowercased().contains(lowered) }.map(\.id))
+        let filteredNodes = base.nodes.filter { matchingIDs.contains($0.id) }
+        let filteredEdges = base.edges.filter {
+            matchingIDs.contains($0.sourceID) && matchingIDs.contains($0.targetID)
+        }
+        return WikiGraphLayoutResult(nodes: filteredNodes, edges: filteredEdges)
     }
 
     private var linkedNoteCount: Int {
@@ -79,6 +89,11 @@ struct WikiLinkGraphView: View {
                 .accessibilityAddTraits(.isHeader)
 
             Spacer()
+
+            TextField("Find node", text: $graphSearchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 160)
+                .accessibilityLabel("Search graph nodes")
 
             Picker("Layout", selection: $layoutMode) {
                 ForEach(WikiGraphLayoutMode.allCases) { mode in

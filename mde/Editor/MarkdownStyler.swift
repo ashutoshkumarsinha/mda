@@ -143,6 +143,22 @@ enum MarkdownStyler {
                         .underlineStyle: NSUnderlineStyle.single.rawValue,
                     ], range: contentRange)
                 }
+            case .bold:
+                if let contentRange = construct.contentRange, !isActive {
+                    storage.addAttribute(
+                        .font,
+                        value: EditorPlatform.boldSystemFont(ofSize: options.baseFontSize),
+                        range: contentRange
+                    )
+                }
+            case .italic:
+                if let contentRange = construct.contentRange, !isActive {
+                    storage.addAttribute(
+                        .font,
+                        value: EditorPlatform.italicSystemFont(ofSize: options.baseFontSize),
+                        range: contentRange
+                    )
+                }
             case .tag:
                 if let contentRange = construct.contentRange {
                     let alpha: CGFloat = isActive ? 1.0 : 0.85
@@ -303,6 +319,10 @@ enum MarkdownStyler {
                     storage.addAttributes([
                         .paragraphStyle: listParagraphStyle(),
                     ], range: applyRange)
+                } else if trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
+                    storage.addAttributes([
+                        .paragraphStyle: listParagraphStyle(),
+                    ], range: applyRange)
                 }
             }
 
@@ -334,6 +354,9 @@ enum MarkdownStyler {
                 value: EditorPlatform.monospacedSystemFont(ofSize: baseFontSize - 1),
                 range: range
             )
+        }
+        applyPattern(#"~~([^~]+)~~"#, in: text, storage: storage, styleRange: styleRange) { range in
+            storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
         }
     }
 

@@ -13,6 +13,19 @@ import UIKit
 
 enum MarkdownImageRenderer {
     private static let maxDisplayWidth: CGFloat = 360
+    #if os(macOS)
+    private static let imageCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 48
+        return cache
+    }()
+    #else
+    private static let imageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 48
+        return cache
+    }()
+    #endif
 
     static func apply(
         to storage: NSMutableAttributedString,
@@ -41,7 +54,15 @@ enum MarkdownImageRenderer {
 
     #if os(macOS)
     private static func makeAttachment(for url: URL) -> NSTextAttachment? {
-        guard let image = NSImage(contentsOf: url) else { return nil }
+        let key = url.path as NSString
+        let image: NSImage
+        if let cached = imageCache.object(forKey: key) {
+            image = cached
+        } else {
+            guard let loaded = NSImage(contentsOf: url) else { return nil }
+            imageCache.setObject(loaded, forKey: key)
+            image = loaded
+        }
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = displayBounds(for: image.size)
@@ -56,7 +77,15 @@ enum MarkdownImageRenderer {
     }
     #else
     private static func makeAttachment(for url: URL) -> NSTextAttachment? {
-        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+        let key = url.path as NSString
+        let image: UIImage
+        if let cached = imageCache.object(forKey: key) {
+            image = cached
+        } else {
+            guard let loaded = UIImage(contentsOfFile: url.path) else { return nil }
+            imageCache.setObject(loaded, forKey: key)
+            image = loaded
+        }
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = displayBounds(for: image.size)

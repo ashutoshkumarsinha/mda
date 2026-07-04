@@ -13,15 +13,24 @@ enum VaultPackageImporter {
         return (try? VaultExportManifest.decode(from: data)) != nil
     }
 
-    static func importPackage(at rootURL: URL, into store: VaultStore) throws -> [Note] {
+    static func importPackage(
+        at rootURL: URL,
+        into store: VaultStore,
+        mode: VaultPackageImportMode
+    ) throws -> VaultPackageImportResult {
         let manifestURL = rootURL.appendingPathComponent(VaultPackageExport.manifestFileName)
         let manifest = try VaultExportManifest.decode(from: Data(contentsOf: manifestURL))
         guard manifest.exportVersion == VaultExportManifest.exportVersion else {
             throw VaultImportError.unsupportedExportVersion(manifest.exportVersion)
         }
 
+        let assetsSkipped = !manifest.assets.isEmpty && !store.isPackageAttached
         if store.isPackageAttached, let packageURL = store.attachedPackageURL {
             try importAssets(from: rootURL, manifest: manifest, into: store, packageURL: packageURL)
+        }
+
+        if mode == .replace {
+            try store.softDeleteAllActiveNotes()
         }
 
         var imported: [Note] = []
@@ -30,10 +39,26 @@ enum VaultPackageImporter {
             guard FileManager.default.fileExists(atPath: noteURL.path) else { continue }
             let rawContent = try String(contentsOf: noteURL, encoding: .utf8)
             let content = normalizedImportContent(rawContent, title: entry.title)
-            let note = try store.createNote(title: entry.title, content: content)
+            let note = try importNote(entry: entry, content: content, mode: mode == .replace ? .merge : mode, into: store)
             imported.append(note)
         }
-        return imported
+
+        try store.enqueueSyncForImportedNotes(imported)
+        return VaultPackageImportResult(notes: imported, assetsSkipped: assetsSkipped)
+    }
+
+    private static func importNote(
+        entry: VaultExportManifest.NoteEntry,
+        content: String,
+        mode: VaultPackageImportMode,
+        into store: VaultStore
+    ) throws -> Note {
+        switch mode {
+        case .add:
+            return try store.createNote(title: entry.title, content: content)
+        case .merge, .replace:
+            return try store.upsertNoteFromImport(id: entry.id, title: entry.title, content: content)
+        }
     }
 
     private static func importAssets(

@@ -23,6 +23,12 @@ final class SyncCoordinator {
     var conflict: NoteConflict?
     var isSyncEnabled = false
 
+    var vaultID: String { store.meta.vaultID }
+
+    func conflictLogEntries() -> [SyncConflictLogEntry] {
+        SyncConflictLog.entries(vaultID: vaultID)
+    }
+
     private let store: VaultStore
     private let transport: SyncTransport
     private let keyStore: SyncKeyStoring
@@ -295,6 +301,11 @@ final class SyncCoordinator {
                     break
                 case .conflict(let noteConflict):
                     conflict = noteConflict
+                    SyncConflictLog.append(
+                        noteID: noteConflict.local.noteID,
+                        title: noteConflict.local.title,
+                        vaultID: store.meta.vaultID
+                    )
                     status = .error("Sync conflict detected")
                     return
                 }

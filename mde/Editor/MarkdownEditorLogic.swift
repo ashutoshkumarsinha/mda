@@ -29,4 +29,25 @@ enum MarkdownEditorLogic {
         }
         return nil
     }
+
+    /// Expands a single-character deletion inside link syntax to remove the whole link token.
+    static func expandedDeletionRange(for range: NSRange, replacement: String, in text: String) -> NSRange? {
+        guard replacement.isEmpty else { return nil }
+
+        for link in WikiLinkExtractor.linkRanges(in: text) {
+            guard NSIntersectionRange(range, link.fullRange).length > 0 else { continue }
+            if range.location <= link.fullRange.location + 1 {
+                return link.fullRange
+            }
+        }
+
+        for ref in MarkdownLinkExtractor.references(in: text) {
+            guard NSIntersectionRange(range, ref.fullRange).length > 0 else { continue }
+            if range.location <= ref.fullRange.location + 1 {
+                return ref.fullRange
+            }
+        }
+
+        return nil
+    }
 }

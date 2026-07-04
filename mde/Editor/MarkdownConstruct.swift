@@ -9,6 +9,7 @@ struct MarkdownConstruct {
     enum Kind {
         case heading
         case bold
+        case italic
         case wikilink
         case markdownLink
         case task
@@ -112,6 +113,7 @@ enum MarkdownConstructScanner {
         result.append(contentsOf: wikiLinkConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: linkConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: boldConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: italicConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: tagConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: imageConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: inlineCodes)
@@ -242,6 +244,22 @@ enum MarkdownConstructScanner {
                 fullRange: link.fullRange,
                 tokenRanges: [open, close],
                 contentRange: link.titleRange
+            )
+        }
+    }
+
+    private static func italicConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
+        guard let regex = try? NSRegularExpression(pattern: #"(?<!\*)\*([^*]+)\*(?!\*)"#) else { return [] }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard !ranges(excluding, contain: match.range) else { return nil }
+            let open = NSRange(location: match.range.location, length: 1)
+            let close = NSRange(location: match.range.upperBound - 1, length: 1)
+            return MarkdownConstruct(
+                kind: .italic,
+                fullRange: match.range,
+                tokenRanges: [open, close],
+                contentRange: match.range(at: 1)
             )
         }
     }

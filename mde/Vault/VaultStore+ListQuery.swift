@@ -33,11 +33,13 @@ extension VaultStore {
         limit: Int,
         tagPath: String?,
         scope: NoteListScope,
+        sort: NoteListSort = .updated,
         in db: Database
     ) throws -> [NoteListItem] {
         let safeOffset = max(0, offset)
         let safeLimit = max(1, limit)
         let effectiveScope = effectiveListScope(tagPath: tagPath, scope: scope)
+        let orderSQL = Self.listOrderSQL(sort: sort)
 
         if let tagPath {
             return try PerformanceSignpost.measure(.vaultListPage) {
@@ -49,7 +51,7 @@ extension VaultStore {
                     WHERE n.is_deleted = 0
                       AND (t.path = ? OR t.path LIKE ?)
                     GROUP BY n.id
-                    ORDER BY n.is_pinned DESC, n.updated_at DESC
+                    ORDER BY \(orderSQL)
                     LIMIT ? OFFSET ?
                 """, arguments: [tagPath, "\(tagPath)/%", safeLimit, safeOffset]).map(Self.mapListItemRow)
             }
@@ -78,7 +80,7 @@ extension VaultStore {
                     FROM note n
                     WHERE n.is_deleted = 0
                       AND (n.is_pinned = 1 OR n.updated_at >= ?)
-                    ORDER BY n.is_pinned DESC, n.updated_at DESC
+                    ORDER BY \(orderSQL)
                     LIMIT ? OFFSET ?
                 """, arguments: [cutoff, safeLimit, safeOffset]).map(Self.mapListItemRow)
             }
@@ -88,10 +90,19 @@ extension VaultStore {
                     \(Self.listItemSelectSQL)
                     FROM note n
                     WHERE n.is_deleted = 0
-                    ORDER BY n.is_pinned DESC, n.updated_at DESC
+                    ORDER BY \(orderSQL)
                     LIMIT ? OFFSET ?
                 """, arguments: [safeLimit, safeOffset]).map(Self.mapListItemRow)
             }
+        }
+    }
+
+    private static func listOrderSQL(sort: NoteListSort) -> String {
+        switch sort {
+        case .updated:
+            "n.is_pinned DESC, n.updated_at DESC"
+        case .title:
+            "n.is_pinned DESC, lower(n.title) ASC, n.updated_at DESC"
         }
     }
 

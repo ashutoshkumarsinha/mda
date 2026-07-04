@@ -55,7 +55,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **110+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
+**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **v4 complete** (smart import merge, editor polish, templates, graph search). **120+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
 
 ### Differentiation (v1)
 
@@ -687,6 +687,10 @@ Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. v2.0â€
 
 Phased v3 delivery is documented in **[v3-roadmap.md](./v3-roadmap.md)**. v3.0â€“v3.2 are complete: package/zip import, external markdown links, and WikiLink aliases.
 
+## v4 roadmap
+
+Phased v4 delivery is documented in **[v4-roadmap.md](./v4-roadmap.md)**. v4.0â€“v4.5 are complete: smart import merge, editor constructs, templates, graph search, sync conflict log, and image cache.
+
 ---
 
 ## 19. Glossary
@@ -717,3 +721,4 @@ Phased v3 delivery is documented in **[v3-roadmap.md](./v3-roadmap.md)**. v3.0â€
 | 1.4 | 2026-07-04 | v2 kickoff: [v2-roadmap.md](./v2-roadmap.md), `vault_asset` schema, image import API |
 | 1.5 | 2026-07-04 | v2 complete: tables, export packaging, CloudKit asset sync, 100+ unit tests |
 | 1.6 | 2026-07-04 | v3 complete: package/zip import, external links, WikiLink aliases |
+| 1.7 | 2026-07-04 | v4 complete: smart import merge, editor polish, templates, graph search |
