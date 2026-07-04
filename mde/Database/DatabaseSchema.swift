@@ -133,6 +133,28 @@ enum DatabaseSchema {
             try db.create(index: "idx_note_asset_asset_id", on: "note_asset", columns: ["asset_id"])
         }
 
+        migrator.registerMigration("v4_asset_sync") { db in
+            try db.create(table: "asset_sync_base") { t in
+                t.column("asset_id", .text).primaryKey()
+                    .references("vault_asset", onDelete: .cascade)
+                t.column("content_checksum", .text).notNull()
+                t.column("synced_at", .datetime).notNull()
+            }
+
+            try db.create(table: "asset_sync_queue") { t in
+                t.column("id", .text).primaryKey()
+                t.column("asset_id", .text).notNull()
+                    .references("vault_asset", onDelete: .cascade)
+                t.column("vault_id", .text).notNull()
+                t.column("enqueued_at", .datetime).notNull()
+            }
+            try db.create(
+                index: "idx_asset_sync_queue_vault",
+                on: "asset_sync_queue",
+                columns: ["vault_id", "enqueued_at"]
+            )
+        }
+
         return migrator
     }
 
@@ -140,6 +162,7 @@ enum DatabaseSchema {
         "v1_initial_schema",
         "v2_list_query_index",
         "v3_vault_assets",
+        "v4_asset_sync",
     ]
 
     static func migrate(_ dbQueue: DatabaseQueue, databaseURL: URL? = nil) throws {

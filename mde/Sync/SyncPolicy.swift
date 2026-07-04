@@ -14,4 +14,7 @@ enum SyncPolicy {
 
     /// Maximum encrypted payload size before upload is rejected (CloudKit field guidance).
     static let maxRecordBytes = 1_024 * 1_024
+
+    /// Maximum encrypted asset blob size (uses CKAsset above note field limits).
+    static let maxAssetRecordBytes = 10 * 1_024 * 1_024
 }

@@ -32,6 +32,8 @@ struct DatabaseSchemaTests {
             #expect(tables.contains("note_sync_base"))
             #expect(tables.contains("vault_asset"))
             #expect(tables.contains("note_asset"))
+            #expect(tables.contains("asset_sync_base"))
+            #expect(tables.contains("asset_sync_queue"))
 
             let ftsTables = try String.fetchAll(db, sql: """
                 SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'note_fts'
@@ -1726,5 +1728,124 @@ struct VaultExportTests {
         } catch VaultExportError.assetsUnavailable {
             #expect(Bool(true))
         }
+    }
+}
+
+// MARK: - v2.4 asset sync
+
+@MainActor
+struct AssetSyncTests {
+
+    private func makePNGBytes() -> Data {
+        Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        ])
+    }
+
+    @Test(.serialized) func syncsAssetBlobWithNote() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = "asset-sync-\(UUID().uuidString)"
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        let tempA = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        let tempB = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer {
+            try? FileManager.default.removeItem(at: tempA)
+            try? FileManager.default.removeItem(at: tempB)
+        }
+
+        let meta = VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true)
+        let storeA = VaultStore(meta: meta, databaseKeyStore: InMemoryVaultDatabaseKeyStore())
+        let storeB = VaultStore(meta: meta, databaseKeyStore: InMemoryVaultDatabaseKeyStore())
+        try storeA.attachToPackage(at: tempA)
+        try storeB.attachToPackage(at: tempB)
+
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("sync.png")
+        try makePNGBytes().write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let note = try storeA.createNote(title: "Image Note", content: "")
+        let markdown = try storeA.importImage(from: imageURL, intoNoteID: note.id, altText: "Chart")
+        _ = try storeA.updateNote(id: note.id, content: markdown)
+
+        let coordinatorA = SyncCoordinator(store: storeA, transport: transport, keyStore: keyStore)
+        try await coordinatorA.enableSync()
+        await coordinatorA.syncNow(forceFull: true)
+
+        #expect(transport.assetUploadCount >= 1)
+        #expect(transport.uploadCount >= 1)
+
+        let coordinatorB = SyncCoordinator(store: storeB, transport: transport, keyStore: keyStore)
+        try await coordinatorB.enableSync()
+        await coordinatorB.syncNow(forceFull: true)
+
+        let synced = try #require(try storeB.fetchNote(id: note.id))
+        #expect(synced.content.contains("assets/"))
+        let assetFilename = MarkdownImageExtractor.references(in: synced.content)[0].assetFilename
+        let assetFile = VaultPaths.assetFileURL(in: tempB, filename: assetFilename)
+        #expect(FileManager.default.fileExists(atPath: assetFile.path))
+    }
+
+    @Test func skipsAssetUploadWhenChecksumMatchesBase() async throws {
+        let transport = InMemorySyncTransport()
+        let keyStore = InMemorySyncKeyStore()
+        let vaultID = "asset-skip-\(UUID().uuidString)"
+        let key = SyncEncryption.generateKey()
+        try keyStore.saveKey(key, vaultID: vaultID)
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore(
+            meta: VaultMeta(formatVersion: 1, vaultID: vaultID, createdAt: Date(), syncEnabled: true),
+            databaseKeyStore: InMemoryVaultDatabaseKeyStore()
+        )
+        try store.attachToPackage(at: tempDir)
+
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("same.png")
+        try makePNGBytes().write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let note = try store.createNote(title: "Once", content: "")
+        let markdown = try store.importImage(from: imageURL, intoNoteID: note.id)
+        _ = try store.updateNote(id: note.id, content: markdown)
+
+        let assetID = try store.assetsLinkedToNote(id: note.id)[0].id
+        let payloads = try store.pendingAssetSyncPayloads()
+        let payload = payloads[0].0
+        try store.saveAssetSyncBase(assetID: assetID, contentChecksum: payload.contentChecksum)
+
+        let coordinator = SyncCoordinator(store: store, transport: transport, keyStore: keyStore)
+        try await coordinator.enableSync()
+        await coordinator.syncNow(forceFull: true)
+
+        #expect(transport.assetUploadCount == 0)
+    }
+
+    @Test func assetEncryptionRoundTrips() throws {
+        let key = SyncEncryption.generateKey()
+        let asset = VaultAsset(
+            id: UUID().uuidString,
+            filename: "abc.png",
+            mimeType: "image/png",
+            byteSize: 4,
+            createdAt: Date()
+        )
+        let data = Data([1, 2, 3, 4])
+        let checksum = AssetSyncChecksum.compute(for: data)
+        let payload = AssetSyncPayload(asset: asset, vaultID: "vault", contentChecksum: checksum)
+        let encrypted = try SyncEncryption.encrypt(payload: payload, data: data, using: key)
+        let (decodedPayload, decodedData) = try SyncEncryption.decryptAsset(encrypted, using: key)
+        #expect(decodedPayload.assetID == asset.id)
+        #expect(decodedData == data)
     }
 }

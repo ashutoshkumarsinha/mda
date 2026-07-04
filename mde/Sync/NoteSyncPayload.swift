@@ -58,6 +58,22 @@ nonisolated struct EncryptedSyncRecord: Equatable, Sendable {
 
 struct SyncFetchResult: Sendable {
     var records: [EncryptedSyncRecord]
+    var assetRecords: [EncryptedAssetSyncRecord]
     var deletedNoteIDs: [String]
+    var deletedAssetIDs: [String]
     var changeToken: Data?
+
+    init(
+        records: [EncryptedSyncRecord],
+        assetRecords: [EncryptedAssetSyncRecord] = [],
+        deletedNoteIDs: [String] = [],
+        deletedAssetIDs: [String] = [],
+        changeToken: Data? = nil
+    ) {
+        self.records = records
+        self.assetRecords = assetRecords
+        self.deletedNoteIDs = deletedNoteIDs
+        self.deletedAssetIDs = deletedAssetIDs
+        self.changeToken = changeToken
+    }
 }

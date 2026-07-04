@@ -196,6 +196,8 @@ final class SyncCoordinator {
     }
 
     private func pushPending(using key: SymmetricKey) async throws {
+        try await pushPendingAssets(using: key)
+
         let payloads = try store.pendingSyncPayloads()
         for payload in payloads {
             if let uploaded = try store.syncBase(for: payload.noteID),
@@ -207,6 +209,41 @@ final class SyncCoordinator {
             try store.saveSyncBase(payload)
             try store.dequeueSync(noteID: payload.noteID)
         }
+    }
+
+    private func pushPendingAssets(using key: SymmetricKey) async throws {
+        let pending = try store.pendingAssetSyncPayloads()
+        for (payload, data) in pending {
+            if let uploadedChecksum = try store.assetSyncBaseChecksum(for: payload.assetID),
+               uploadedChecksum == payload.contentChecksum {
+                try store.dequeueAssetSync(assetID: payload.assetID)
+                continue
+            }
+            try await uploadAsset(payload: payload, data: data, using: key)
+            try store.saveAssetSyncBase(assetID: payload.assetID, contentChecksum: payload.contentChecksum)
+            try store.dequeueAssetSync(assetID: payload.assetID)
+        }
+    }
+
+    private func uploadAsset(
+        payload: AssetSyncPayload,
+        data: Data,
+        using key: SymmetricKey
+    ) async throws {
+        let ciphertext = try SyncEncryption.encrypt(payload: payload, data: data, using: key)
+        guard ciphertext.count <= SyncPolicy.maxAssetRecordBytes else {
+            throw SyncError.assetTooLarge(ciphertext.count)
+        }
+        let record = EncryptedAssetSyncRecord(
+            assetID: payload.assetID,
+            vaultID: payload.vaultID,
+            ciphertext: ciphertext,
+            filename: payload.filename,
+            mimeType: payload.mimeType,
+            byteSize: payload.byteSize,
+            contentChecksum: payload.contentChecksum
+        )
+        try await transport.uploadAsset(record, vaultID: payload.vaultID)
     }
 
     private func uploadPayload(_ payload: NoteSyncPayload, using key: SymmetricKey) async throws {
@@ -231,6 +268,18 @@ final class SyncCoordinator {
             since: changeToken
         )
         persistChangeToken(result.changeToken)
+
+        for encryptedAsset in result.assetRecords {
+            let (payload, data) = try SyncEncryption.decryptAsset(encryptedAsset.ciphertext, using: key)
+            guard payload.assetID == encryptedAsset.assetID,
+                  payload.contentChecksum == encryptedAsset.contentChecksum else {
+                continue
+            }
+            if try store.assetSyncBaseChecksum(for: payload.assetID) == payload.contentChecksum {
+                continue
+            }
+            try store.applyRemoteAsset(payload, data: data)
+        }
 
         for encrypted in result.records {
             let remote = try SyncEncryption.decrypt(encrypted.ciphertext, using: key)

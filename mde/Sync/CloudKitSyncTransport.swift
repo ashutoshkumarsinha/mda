@@ -27,6 +27,24 @@ actor CloudKitSyncTransport: SyncTransport {
         _ = try await database.save(ckRecord)
     }
 
+    func uploadAsset(_ record: EncryptedAssetSyncRecord, vaultID: String) async throws {
+        let zoneID = try await ensureZone(vaultID: vaultID)
+        let ckRecord = CKRecord(recordType: "MDEAsset", recordID: CKRecord.ID(recordName: record.assetID, zoneID: zoneID))
+        ckRecord["vaultID"] = vaultID as CKRecordValue
+        ckRecord["filename"] = record.filename as CKRecordValue
+        ckRecord["mimeType"] = record.mimeType as CKRecordValue
+        ckRecord["byteSize"] = record.byteSize as CKRecordValue
+        ckRecord["contentChecksum"] = record.contentChecksum as CKRecordValue
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mde-asset-\(record.assetID).bin")
+        try record.ciphertext.write(to: tempURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        ckRecord["ciphertext"] = CKAsset(fileURL: tempURL)
+
+        _ = try await database.save(ckRecord)
+    }
+
     func fetchRemote(vaultID: String, since changeToken: Data?) async throws -> SyncFetchResult {
         let zoneID = try await ensureZone(vaultID: vaultID)
         let token: CKServerChangeToken?
@@ -49,14 +67,31 @@ actor CloudKitSyncTransport: SyncTransport {
         )
 
         operation.recordWasChangedBlock = { _, result in
-            if case .success(let ckRecord) = result,
-               let encrypted = CloudKitRecordParser.encryptedRecord(from: ckRecord, vaultID: vaultID) {
-                results.addRecord(encrypted)
+            if case .success(let ckRecord) = result {
+                switch ckRecord.recordType {
+                case "MDENote":
+                    if let encrypted = CloudKitRecordParser.encryptedRecord(from: ckRecord, vaultID: vaultID) {
+                        results.addRecord(encrypted)
+                    }
+                case "MDEAsset":
+                    if let encrypted = CloudKitRecordParser.encryptedAssetRecord(from: ckRecord, vaultID: vaultID) {
+                        results.addAssetRecord(encrypted)
+                    }
+                default:
+                    break
+                }
             }
         }
 
-        operation.recordWithIDWasDeletedBlock = { recordID, _ in
-            results.addDeleted(recordID.recordName)
+        operation.recordWithIDWasDeletedBlock = { recordID, recordType in
+            switch recordType {
+            case "MDENote":
+                results.addDeleted(recordID.recordName)
+            case "MDEAsset":
+                results.addDeletedAsset(recordID.recordName)
+            default:
+                break
+            }
         }
 
         operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
@@ -91,7 +126,13 @@ actor CloudKitSyncTransport: SyncTransport {
             encodedToken = changeToken
         }
 
-        return SyncFetchResult(records: results.records, deletedNoteIDs: results.deletedNoteIDs, changeToken: encodedToken)
+        return SyncFetchResult(
+            records: results.records,
+            assetRecords: results.assetRecords,
+            deletedNoteIDs: results.deletedNoteIDs,
+            deletedAssetIDs: results.deletedAssetIDs,
+            changeToken: encodedToken
+        )
     }
 
     private func ensureZone(vaultID: String) async throws -> CKRecordZone.ID {
@@ -123,12 +164,43 @@ private enum CloudKitRecordParser {
             isDeleted: isDeleted
         )
     }
+
+    nonisolated static func encryptedAssetRecord(from record: CKRecord, vaultID: String) -> EncryptedAssetSyncRecord? {
+        guard let filename = record["filename"] as? String,
+              let mimeType = record["mimeType"] as? String,
+              let byteSize = record["byteSize"] as? Int64,
+              let contentChecksum = record["contentChecksum"] as? String else {
+            return nil
+        }
+
+        let ciphertext: Data?
+        if let data = record["ciphertext"] as? Data {
+            ciphertext = data
+        } else if let asset = record["ciphertext"] as? CKAsset, let url = asset.fileURL {
+            ciphertext = try? Data(contentsOf: url)
+        } else {
+            ciphertext = nil
+        }
+        guard let ciphertext else { return nil }
+
+        return EncryptedAssetSyncRecord(
+            assetID: record.recordID.recordName,
+            vaultID: vaultID,
+            ciphertext: ciphertext,
+            filename: filename,
+            mimeType: mimeType,
+            byteSize: byteSize,
+            contentChecksum: contentChecksum
+        )
+    }
 }
 
 private final class FetchResultsBox: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var records: [EncryptedSyncRecord] = []
+    private(set) var assetRecords: [EncryptedAssetSyncRecord] = []
     private(set) var deletedNoteIDs: [String] = []
+    private(set) var deletedAssetIDs: [String] = []
     private(set) var changeToken: CKServerChangeToken?
 
     func addRecord(_ record: EncryptedSyncRecord) {
@@ -137,9 +209,21 @@ private final class FetchResultsBox: @unchecked Sendable {
         lock.unlock()
     }
 
+    func addAssetRecord(_ record: EncryptedAssetSyncRecord) {
+        lock.lock()
+        assetRecords.append(record)
+        lock.unlock()
+    }
+
     func addDeleted(_ noteID: String) {
         lock.lock()
         deletedNoteIDs.append(noteID)
+        lock.unlock()
+    }
+
+    func addDeletedAsset(_ assetID: String) {
+        lock.lock()
+        deletedAssetIDs.append(assetID)
         lock.unlock()
     }
 

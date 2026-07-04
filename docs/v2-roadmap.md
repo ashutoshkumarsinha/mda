@@ -1,6 +1,6 @@
 # MDE — v2 Roadmap
 
-> **Status:** v2.0–v2.3 complete (2026-07-04)  
+> **Status:** v2 complete (2026-07-04)  
 > **Companion:** [spec.md](./spec.md) §4.2 · [optimization-plan.md](./optimization-plan.md)
 
 v1 and v1.1 are complete. v2 expands the content model (images, tables), import fidelity, and export packaging — without plugins or a marketplace (still non-goals).
@@ -29,7 +29,7 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 | `importImage(intoNoteID:)` API | ✅ |
 | Image construct parsing + inline attachment rendering | ✅ |
 | Toolbar / file picker image insert UI | ✅ |
-| Asset sync (CloudKit) | — |
+| Asset sync (CloudKit) | ✅ |
 
 **Exit:** Attach image to note in package vault; asset file on disk; markdown round-trips; unit tests pass.
 
@@ -49,10 +49,10 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 - ✅ Zip export: `notes/*.md` + `assets/` + `meta.json` manifest
 - ✅ Per-note folder / zip export (note markdown + linked assets)
 
-### v2.4 — Asset sync
+### v2.4 — Asset sync *(complete)*
 
-- Upload asset blobs with encrypted note payloads
-- Conflict: asset immutable by `asset_id`; re-upload on content change only
+- ✅ Upload encrypted asset blobs alongside note payloads (`MDEAsset` CloudKit records)
+- ✅ Skip re-upload when `content_checksum` matches sync base; replace local file when checksum changes
 
 ---
 

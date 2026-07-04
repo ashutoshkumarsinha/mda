@@ -668,7 +668,7 @@ All open questions are **resolved** for v1/v1.1.
 
 ## v2 roadmap
 
-Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. Kickoff (v2.0) adds vault-local image assets; tables, Obsidian media import, zip export, and asset sync follow in v2.1–v2.4.
+Phased v2 delivery is documented in **[v2-roadmap.md](./v2-roadmap.md)**. v2.0–v2.4 are complete: vault assets, Obsidian import, GFM tables, package/zip export, and encrypted CloudKit asset sync (`MDEAsset` records).
 
 ---
 

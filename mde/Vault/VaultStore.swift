@@ -801,7 +801,9 @@ final class VaultStore {
     func pendingSyncCount() throws -> Int {
         guard let dbQueue else { return 0 }
         return try dbQueue.read { db in
-            try SyncQueueStore.pendingCount(vaultID: meta.vaultID, in: db)
+            let notes = try SyncQueueStore.pendingCount(vaultID: meta.vaultID, in: db)
+            let assets = try AssetSyncStore.pendingCount(vaultID: meta.vaultID, in: db)
+            return notes + assets
         }
     }
 

@@ -49,6 +49,8 @@ extension VaultStore {
             try link.insert(db)
         }
 
+        try enqueueAssetSync(assetID: assetID)
+
         return VaultAssetStore.markdownReference(alt: altText, asset: asset)
     }
 
