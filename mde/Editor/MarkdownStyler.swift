@@ -98,9 +98,10 @@ enum MarkdownStyler {
         options: MarkdownStyleOptions
     ) {
         let tokenHiddenAlpha = options.tokenHiddenAlpha
+        let activeTableBlock = activeTableBlockRange(for: active)
 
         for construct in constructs {
-            let isActive = active?.fullRange == construct.fullRange
+            let isActive = isConstructActive(construct, active: active, activeTableBlock: activeTableBlock)
 
             if construct.kind != .inlineCode {
                 for tokenRange in construct.tokenRanges {
@@ -181,9 +182,88 @@ enum MarkdownStyler {
                         .font: EditorPlatform.italicSystemFont(ofSize: options.baseFontSize - 1),
                     ], range: contentRange)
                 }
+            case .tableHeaderRow, .tableBodyRow, .tableSeparatorRow:
+                applyTableRowStyle(
+                    construct: construct,
+                    isActive: isActive,
+                    storage: storage,
+                    options: options,
+                    tokenHiddenAlpha: tokenHiddenAlpha
+                )
             default:
                 break
             }
+        }
+    }
+
+    private static func activeTableBlockRange(for active: MarkdownConstruct?) -> NSRange? {
+        guard let active else { return nil }
+        switch active.kind {
+        case .tableHeaderRow, .tableSeparatorRow, .tableBodyRow:
+            return active.tableBlockRange
+        default:
+            return nil
+        }
+    }
+
+    private static func isConstructActive(
+        _ construct: MarkdownConstruct,
+        active: MarkdownConstruct?,
+        activeTableBlock: NSRange?
+    ) -> Bool {
+        if let activeTableBlock,
+           let constructBlock = construct.tableBlockRange,
+           NSEqualRanges(activeTableBlock, constructBlock) {
+            return true
+        }
+        return active?.fullRange == construct.fullRange
+    }
+
+    private static func applyTableRowStyle(
+        construct: MarkdownConstruct,
+        isActive: Bool,
+        storage: NSMutableAttributedString,
+        options: MarkdownStyleOptions,
+        tokenHiddenAlpha: CGFloat
+    ) {
+        let rowBackgroundAlpha: CGFloat = isActive ? 0.08 : 0.14
+        storage.addAttribute(
+            .backgroundColor,
+            value: EditorPlatform.quaternaryLabelColor.withAlphaComponent(rowBackgroundAlpha),
+            range: construct.fullRange
+        )
+
+        switch construct.kind {
+        case .tableHeaderRow:
+            for cellRange in construct.cellRanges {
+                storage.addAttribute(
+                    .font,
+                    value: EditorPlatform.boldSystemFont(ofSize: options.baseFontSize),
+                    range: cellRange
+                )
+            }
+        case .tableSeparatorRow:
+            let alpha: CGFloat = isActive ? 0.55 : tokenHiddenAlpha
+            storage.addAttribute(
+                .foregroundColor,
+                value: EditorPlatform.secondaryLabelColor.withAlphaComponent(alpha),
+                range: construct.fullRange
+            )
+            storage.addAttribute(
+                .font,
+                value: EditorPlatform.monospacedSystemFont(ofSize: options.baseFontSize - 2),
+                range: construct.fullRange
+            )
+        case .tableBodyRow:
+            for cellRange in construct.cellRanges {
+                storage.addAttribute(
+                    .font,
+                    value: EditorPlatform.systemFont(ofSize: options.baseFontSize),
+                    range: cellRange
+                )
+            }
+        default:
+            break
         }
     }
 

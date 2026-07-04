@@ -1588,3 +1588,68 @@ struct VaultAssetTests {
         #expect(refs[0].target == "./local.png")
     }
 }
+
+// MARK: - v2.2 GFM tables
+
+struct MarkdownTableTests {
+
+    @Test func parserFindsGFMTableBlock() {
+        let text = """
+        Intro
+
+        | Name | Age |
+        | ---- | --- |
+        | Ada | 36 |
+
+        After
+        """
+        let blocks = MarkdownTableParser.blocks(in: text)
+        #expect(blocks.count == 1)
+        #expect(blocks[0].rows.count == 3)
+        #expect(blocks[0].rows[0].role == .header)
+        #expect(blocks[0].rows[1].role == .separator)
+        #expect(blocks[0].rows[2].role == .body)
+    }
+
+    @Test func parserRejectsSinglePipeLine() {
+        let text = "| lone row without separator |\n"
+        #expect(MarkdownTableParser.blocks(in: text).isEmpty)
+    }
+
+    @Test func parserSkipsTablesInsideCodeFence() {
+        let text = """
+        ```md
+        | A | B |
+        | - | - |
+        ```
+        """
+        #expect(MarkdownTableParser.blocks(in: text).isEmpty)
+    }
+
+    @Test func scannerEmitsTableRowConstructs() {
+        let text = "| H1 | H2 |\n| -- | -- |\n| a | b |\n"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        #expect(constructs.contains { $0.kind == .tableHeaderRow })
+        #expect(constructs.contains { $0.kind == .tableSeparatorRow })
+        #expect(constructs.contains { $0.kind == .tableBodyRow })
+    }
+
+    @Test func scannerParsesHeaderCells() {
+        let text = "| Name | Age |\n| ---- | --- |\n"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let header = constructs.first { $0.kind == .tableHeaderRow }
+        #expect(header?.cellRanges.count == 2)
+        let nsText = text as NSString
+        #expect(nsText.substring(with: header!.cellRanges[0]).trimmingCharacters(in: .whitespaces) == "Name")
+        #expect(nsText.substring(with: header!.cellRanges[1]).trimmingCharacters(in: .whitespaces) == "Age")
+    }
+
+    @Test func constructContainingPrefersSmallestRange() {
+        let text = "| **Bold** | Plain |\n| --- | --- |\n"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let bold = constructs.first { $0.kind == .bold }
+        let boldMid = bold!.fullRange.location + 1
+        let active = MarkdownConstructScanner.constructContaining(location: boldMid, in: constructs)
+        #expect(active?.kind == .bold)
+    }
+}

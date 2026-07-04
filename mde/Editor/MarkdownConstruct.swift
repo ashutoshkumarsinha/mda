@@ -17,12 +17,19 @@ struct MarkdownConstruct {
         case codeBlockLine
         case inlineCode
         case image
+        case tableHeaderRow
+        case tableSeparatorRow
+        case tableBodyRow
     }
 
     var kind: Kind
     var fullRange: NSRange
     var tokenRanges: [NSRange]
     var contentRange: NSRange?
+    /// Cell content spans for GFM table rows.
+    var cellRanges: [NSRange] = []
+    /// Rows that belong to the same GFM table share this range.
+    var tableBlockRange: NSRange?
 }
 
 enum MarkdownConstructScanner {
@@ -100,6 +107,7 @@ enum MarkdownConstructScanner {
         let fenceExcluded = codeFenceExcludedRanges(in: text)
         let inlineCodes = inlineCodeConstructs(in: text, excluding: fenceExcluded)
         let literalExcluded = fenceExcluded + inlineCodes.map(\.fullRange)
+        result.append(contentsOf: tableConstructs(in: text))
         result.append(contentsOf: wikiLinkConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: boldConstructs(in: text, excluding: literalExcluded))
         result.append(contentsOf: tagConstructs(in: text, excluding: literalExcluded))
@@ -109,7 +117,9 @@ enum MarkdownConstructScanner {
     }
 
     static func constructContaining(location: Int, in constructs: [MarkdownConstruct]) -> MarkdownConstruct? {
-        constructs.first { NSLocationInRange(location, $0.fullRange) }
+        constructs
+            .filter { NSLocationInRange(location, $0.fullRange) }
+            .min(by: { $0.fullRange.length < $1.fullRange.length })
     }
 
     static func constructs(_ constructs: [MarkdownConstruct], intersecting range: NSRange) -> [MarkdownConstruct] {
@@ -165,6 +175,27 @@ enum MarkdownConstructScanner {
 
     private static func ranges(_ ranges: [NSRange], contain target: NSRange) -> Bool {
         ranges.contains { NSIntersectionRange($0, target).length > 0 }
+    }
+
+    private static func tableConstructs(in text: String) -> [MarkdownConstruct] {
+        MarkdownTableParser.blocks(in: text).flatMap { block in
+            block.rows.map { row in
+                let kind: MarkdownConstruct.Kind
+                switch row.role {
+                case .header: kind = .tableHeaderRow
+                case .separator: kind = .tableSeparatorRow
+                case .body: kind = .tableBodyRow
+                }
+                return MarkdownConstruct(
+                    kind: kind,
+                    fullRange: row.lineRange,
+                    tokenRanges: row.pipeRanges,
+                    contentRange: row.lineRange,
+                    cellRanges: row.cellRanges,
+                    tableBlockRange: block.fullRange
+                )
+            }
+        }
     }
 
     private static func imageConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {

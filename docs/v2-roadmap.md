@@ -1,6 +1,6 @@
 # MDE — v2 Roadmap
 
-> **Status:** v2.0 + v2.1 complete (2026-07-04)  
+> **Status:** v2.0–v2.2 complete (2026-07-04)  
 > **Companion:** [spec.md](./spec.md) §4.2 · [optimization-plan.md](./optimization-plan.md)
 
 v1 and v1.1 are complete. v2 expands the content model (images, tables), import fidelity, and export packaging — without plugins or a marketplace (still non-goals).
@@ -39,10 +39,10 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 - ✅ Skip `.obsidian` during recursive import
 - WikiLink `[[Note]]` already supported
 
-### v2.2 — Tables
+### v2.2 — Tables *(complete)*
 
-- GFM pipe tables in parser + read-only styled preview (hybrid tokens)
-- No cell editing UX in first slice — render-only, then edit
+- ✅ GFM pipe tables in parser + hybrid styled preview (header bold, faded pipes when caret outside)
+- ✅ No cell editing UX — render-only while editing raw markdown
 
 ### v2.3 — Export packaging
 
@@ -72,9 +72,9 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 | Storage | Binary in `MyVault.mde/assets/`; metadata in `vault_asset` / `note_asset` |
 | In-memory vault | Image import requires attached package |
 
-### Tables (v2.2, planned)
+### Tables (v2.2)
 
-GFM pipe tables; header row + separator `|---|`; no HTML.
+GFM pipe tables; header row + separator `|---|`; no HTML. Hybrid editor shows header cells bold and fades pipe tokens when the caret is outside the table.
 
 ---
 

@@ -134,7 +134,7 @@ Formal rules for the parser, indexer, and editor. Implementation uses `swift-mar
 | Inline code | `` `code` `` | SHOULD ✅ | Monospace; **backtick tokens always visible** (no hybrid hide) |
 | Code fence | ` ``` ` | v1.1 ✅ | Monospace block; fence tokens hybrid |
 | Blockquote | `>` | v1.1 ✅ | Muted text + indent |
-| Image / table / HTML | — | v2 *(images: foundation ✅)* | Images: `assets/` + `![alt](assets/…)`; tables planned v2.2 |
+| Image / table / HTML | — | v2 *(images ✅, tables ✅)* | Images: `assets/` + `![alt](assets/…)`; GFM pipe tables with hybrid preview |
 
 ### 5.2 WikiLinks
 
