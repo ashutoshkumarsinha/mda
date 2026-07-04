@@ -158,12 +158,19 @@ struct ContentView: View {
         }
         #endif
         .alert("Database Recovery", isPresented: $showRecoveryAlert) {
-            Button("Restore Backup") {
-                restoreDatabase()
+            if store.recoveryBackupAvailable {
+                Button("Restore Migration Backup") {
+                    restoreDatabase(from: .migrationBackup)
+                }
+            }
+            if store.recoveryAutosaveAvailable {
+                Button("Restore Last Autosave") {
+                    restoreDatabase(from: .autosaveSnapshot)
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The vault database may be damaged. Restore from the last automatic backup?")
+            Text(recoveryMessage)
         }
         .alert("Recovery Failed", isPresented: Binding(
             get: { recoveryError != nil },
@@ -355,9 +362,22 @@ struct ContentView: View {
     }
     #endif
 
-    private func restoreDatabase() {
+    private var recoveryMessage: String {
+        switch (store.recoveryBackupAvailable, store.recoveryAutosaveAvailable) {
+        case (true, true):
+            return "The vault database may be damaged. Restore from the migration backup or the last autosave snapshot."
+        case (true, false):
+            return "The vault database may be damaged. Restore from the migration backup."
+        case (false, true):
+            return "The vault database may be damaged. Restore from the last autosave snapshot."
+        case (false, false):
+            return "The vault database may be damaged and no recovery copy is available."
+        }
+    }
+
+    private func restoreDatabase(from source: VaultStore.DatabaseRecoverySource) {
         do {
-            try store.restoreDatabaseFromBackup()
+            try store.restoreDatabase(from: source)
         } catch {
             recoveryError = error.localizedDescription
         }

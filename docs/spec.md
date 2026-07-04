@@ -1,8 +1,8 @@
 # MDE — Product & Functional Specification
 
-> **Status:** Draft v1.0  
-> **Last updated:** 2026-07-02  
-> **Companion:** [HLD](./hld.md) (architecture) · [Docs index](./README.md)
+> **Status:** v1.2 implemented  
+> **Last updated:** 2026-07-04  
+> **Companion:** [HLD](./hld.md) (architecture) · [Docs index](./README.md) · [Optimization plan](./optimization-plan.md)
 
 ---
 
@@ -54,7 +54,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 complete on macOS and iOS — hybrid editor (background parse, paste, IME, placeholder), keyboard shortcuts, DB recovery, multiplatform UI, app icon, 39 unit tests. CloudKit sync requires Release signing + Apple Developer team. See [§13](#13-delivery-phases).
+**Current state:** v1 + v1.1 enhancements complete on macOS and iOS — hybrid editor (background parse, paste, IME, placeholder, inline code, fences, blockquotes), SQLCipher at-rest encryption, keyboard shortcuts, DB recovery (migration backup + autosave snapshot), wiki graph view, markdown import/export, multi-window macOS (`DocumentGroup`), cold-launch benchmark, **82+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team. All delivery phases (§13) and optimization phases ([optimization-plan](./optimization-plan.md)) are complete; open questions (§17) are resolved.
 
 ### Differentiation (v1)
 
@@ -98,16 +98,16 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Search | ⌘F | Search bar on list | ⌘F + search bar |
 | Context menu | Right-click | Long-press | Both |
 | External keyboard | — | macOS shortcuts when connected | Full shortcut set |
-| Multi-window | v1.1 | — | Split View supported |
+| Multi-window | v1.1 ✅ | — | Split View supported |
 
 ### 4.2 v1 scope boundaries
 
-| In v1 | v1.1 *(shipped in optimization Phase 7)* | v2+ |
-|-------|------|-----|
-| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault combined export | Per-note vault folder export zip |
-| Backlinks panel (on-demand) | Multi-window macOS (DocumentGroup native) | Full graph visualization (force layout, pan/zoom, focus) |
-| CloudKit sync + encryption | Soft-delete purge UI, Markdown import | Import Obsidian/Notion folders |
-| Hybrid editor (headers–checkboxes) | Code fences, blockquotes | Images, tables, plugins |
+| In v1 | v1.1 *(shipped)* | v2+ |
+|-------|------------------|-----|
+| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Per-note vault folder export zip |
+| Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Import Obsidian/Notion folders |
+| CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Images, tables, plugins |
+| Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | Plugin marketplace |
 
 ### 4.3 Non-goals
 
@@ -130,9 +130,9 @@ Formal rules for the parser, indexer, and editor. Implementation uses `swift-mar
 | Task list | `- [ ]` / `- [x]` | MUST | Tappable checkbox |
 | WikiLink | `[[Title]]` | MUST | See [§5.2](#52-wikilinks) |
 | Inline tag | `#seg/seg` | MUST | See [§5.3](#53-tags) |
-| Inline code | `` `code` `` | SHOULD | Monospace; tokens always visible |
-| Code fence | ` ``` ` | v1.1 | — |
-| Blockquote | `>` | v1.1 | — |
+| Inline code | `` `code` `` | SHOULD ✅ | Monospace; **backtick tokens always visible** (no hybrid hide) |
+| Code fence | ` ``` ` | v1.1 ✅ | Monospace block; fence tokens hybrid |
+| Blockquote | `>` | v1.1 ✅ | Muted text + indent |
 | Image / table / HTML | — | v2 | Non-goal v1 |
 
 ### 5.2 WikiLinks
@@ -181,8 +181,10 @@ Each **vault** is one DocumentGroup document — a package opened/saved via the 
 
 ```
 MyVault.mde/
-├── meta.json       # format version, vault id, created_at
-├── notes.db        # GRDB SQLite (see HLD §6)
+├── meta.json       # format version, vault id, created_at, database_encrypted
+├── notes.db        # GRDB SQLite (SQLCipher when database_encrypted)
+├── notes.backup.db # pre-migration copy (recovery)
+├── notes.autosave.db # last flush snapshot (FR-D04 recovery)
 └── assets/         # reserved for v2 images
 ```
 
@@ -192,7 +194,29 @@ MyVault.mde/
 | Extension | `.mde` |
 | Conformance | `com.apple.package` |
 
-`meta.json` minimum schema: `{ "format_version": 1, "vault_id": "<uuid>", "created_at": "<iso8601>" }`
+`meta.json` schema (format version 1):
+
+```json
+{
+  "format_version": 1,
+  "vault_id": "<uuid>",
+  "created_at": "<iso8601>",
+  "database_encrypted": true,
+  "sync_enabled": false,
+  "last_synced_at": null,
+  "cloud_change_token": null
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `format_version` | yes | Currently `1` |
+| `vault_id` | yes | Stable UUID; Keychain DB/sync keys are scoped to this |
+| `created_at` | yes | ISO-8601 |
+| `database_encrypted` | no | Defaults `false` on legacy vaults; `true` on new vaults (SQLCipher) |
+| `sync_enabled` | no | Defaults `false` |
+| `last_synced_at` | no | Set after successful CloudKit sync |
+| `cloud_change_token` | no | Base64 CloudKit change token for incremental fetch |
 
 ### 6.2 Vault operations
 
@@ -201,7 +225,7 @@ MyVault.mde/
 | FR-D01 | Open/create `.mde` via DocumentGroup | MUST |
 | FR-D02 | Autosave vault within 2 s of last edit (debounced) | MUST |
 | FR-D03 | One active vault per window; no cross-vault links in v1 | MUST |
-| FR-D04 | Corrupt DB → offer recovery from last autosave snapshot | SHOULD |
+| FR-D04 | Corrupt DB → offer recovery from migration backup or last autosave snapshot (`notes.autosave.db`) | SHOULD ✅ |
 | FR-D05 | Export single note as `.md` file | v1.1 ✅ |
 
 ---
@@ -227,14 +251,14 @@ MyVault.mde/
 |----|-------------|-----|
 | FR-E01 | TextKit 2 via `NSTextView` / `UITextView` representable | MUST |
 | FR-E02 | Raw tokens visible when caret inside construct | MUST |
-| FR-E03 | Tokens hidden (α→0 or collapsed) when caret outside | MUST |
+| FR-E03 | Tokens hidden (α→0.15) when caret outside — **except inline code backticks (always visible)** | MUST |
 | FR-E04 | `swift-markdown` parse; 300 ms debounce | MUST |
 | FR-E05 | Parse on background Actor | MUST |
 | FR-E06 | Render per [§5.1](#51-markdown-subset) and HLD §3.2 | MUST |
 | FR-E07 | Toggle task checkbox on tap | MUST |
 | FR-E08 | Paste: strip to plain text; preserve line breaks | MUST |
 | FR-E09 | Suspend token hide during IME composition | MUST |
-| FR-E10 | Empty editor placeholder: "Start writing…" | SHOULD |
+| FR-E10 | Empty editor placeholder: "Start writing…" | SHOULD ✅ |
 
 ### 7.3 Tags
 
@@ -286,7 +310,7 @@ MyVault.mde/
 | FR-U04 | Card menu: Pin, Merge, Delete | MUST |
 | FR-U05 | macOS 3-column layout per HLD §3.1 | MUST |
 | FR-U06 | iOS/iPad stack per HLD §3.1 | MUST |
-| FR-U07 | Skippable 3-step onboarding on first vault open | SHOULD |
+| FR-U07 | Skippable 3-step onboarding on first vault open | SHOULD ✅ |
 
 ---
 
@@ -355,7 +379,8 @@ stateDiagram-v2
 | Mode | Caret | Tokens | Output |
 |------|-------|--------|--------|
 | Source-adjacent | Inside construct | Visible | Raw + styled |
-| Reading | Outside | Hidden | Clean rich text |
+| Reading | Outside | Hidden (α=0.15) | Clean rich text |
+| Inline code | Anywhere in span | **Backticks always visible** | Monospace content |
 | Checkbox | Tap task | — | Toggle `- [ ]` ↔ `- [x]` |
 
 ### 10.4 Empty & error states
@@ -367,6 +392,7 @@ stateDiagram-v2
 | Empty search | "No results for «q»" | Clear search |
 | Empty backlinks | "No notes link here yet" | — |
 | Duplicate title | "A note titled «t» already exists" | Edit title |
+| DB corrupt | "Restore from migration backup or last autosave" | Restore buttons |
 | Sync error | "Couldn't sync — retrying…" | Retry button |
 | Offline | "Offline — changes saved locally" | — |
 
@@ -417,6 +443,7 @@ stateDiagram-v2
 - [x] MDE branding, bundle ID, `.mde` document type
 - [x] Replace SwiftData with GRDB + vault package layout
 - [x] CI: build + test on macOS (`.github/workflows/ci.yml`)
+- [x] GRDB+SQLCipher local package bootstrap (`scripts/setup-grdb-cipher.sh`)
 
 **Exit:** Builds clean; `TC-000` passes.
 
@@ -435,7 +462,8 @@ stateDiagram-v2
 
 - [x] WikiLink extraction, `note_link` indexing, and target resolution
 - [x] Backlinks panel in editor; tap link to navigate or create target
-- [x] Hybrid token hide/show (caret-aware α=0.15) for headings, bold, tags, tasks, wikilinks
+- [x] Hybrid token hide/show (caret-aware α=0.15) for headings, bold, tags, tasks, wikilinks, fences
+- [x] Inline code (`` `code` ``): monospace; backticks always visible; no tag/link parsing inside spans
 - [x] Task checkbox toggle on click
 - [x] Pin notes (context menu); pinned sort first
 - [x] Merge notes with `## Merged from {title}` section
@@ -454,6 +482,8 @@ stateDiagram-v2
 - [x] `SyncCoordinator` orchestrates push/pull, debounced sync, conflict detection
 - [x] Toolbar sync status indicator + setup sheet (key recovery warning)
 - [x] Conflict banner: Keep Local / Keep Cloud
+- [x] SQLCipher at-rest encryption for `notes.db` (OQ-02)
+- [x] Rolling autosave snapshot (`notes.autosave.db`) for corrupt-DB recovery (FR-D04)
 
 **Exit:** UC-05 · TC-009–TC-011 · all FR-Y*
 
@@ -495,8 +525,8 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 ### TC-000 — Project builds
 
 - **Given** clean checkout
-- **When** `xcodebuild -project mde.xcodeproj -scheme mde build test`
-- **Then** exit 0
+- **When** `./scripts/setup-grdb-cipher.sh` then `xcodebuild -project mde.xcodeproj -scheme mde build test`
+- **Then** exit 0 (`mdeTests` regression gates on macOS; iOS simulator smoke in CI)
 
 ### TC-001 — Create & autosave
 
@@ -593,23 +623,28 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 
 | Package | Role | License |
 |---------|------|---------|
-| [GRDB.swift](https://github.com/groue/GRDB.swift) | SQLite, FTS5, migrations | MIT |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) via `Packages/GRDBCipher` | SQLite, FTS5, migrations, SQLCipher | MIT |
+| [SQLCipher](https://www.zetetic.net/sqlcipher/) | At-rest `notes.db` encryption (OQ-02) | BSD-style |
 | [swift-markdown](https://github.com/apple/swift-markdown) | AST parsing | Apache 2.0 |
 | TextKit 2 | Editor | Apple SDK |
 | CloudKit | Sync | Apple SDK |
-| CryptoKit | AES-GCM | Apple SDK |
+| CryptoKit | AES-GCM sync payloads | Apple SDK |
+
+Run `./scripts/setup-grdb-cipher.sh` once after clone to vendor GRDB sources into `Packages/GRDBCipher/` (not committed).
 
 ---
 
 ## 17. Open questions
 
-| # | Question | Owner | Target | Notes |
-|---|----------|-------|--------|-------|
-| OQ-01 | CRDT library vs custom deltas | Engineering | Phase 3 | LWW fallback acceptable for v1 launch if needed |
-| OQ-02 | Local DB encryption at rest | Engineering | Phase 3 | **Resolved** — SQLCipher via `Packages/GRDBCipher` + Keychain per-vault keys |
-| OQ-03 | Multi-window macOS | Product | v1.1 | — |
+All open questions are **resolved** for v1/v1.1.
 
-**Resolved:** tag filter → subtree inclusive · vault format → `.mde` package · merge UX → primary + append · FTS5 rowid → integer · Xcode rename → `mde`
+| # | Question | Resolution |
+|---|----------|------------|
+| OQ-01 | CRDT library vs custom deltas | Custom `TextCRDT` + `NoteMerger` LWW fallback — no third-party CRDT v1 |
+| OQ-02 | Local DB encryption at rest | SQLCipher via `Packages/GRDBCipher` + Keychain per-vault keys (`name.aks.mde.database`) |
+| OQ-03 | Multi-window macOS | Native `DocumentGroup` — File → New Window, one vault per window |
+
+**Also resolved:** tag filter → subtree inclusive · vault format → `.mde` package · merge UX → primary + append · FTS5 rowid → integer · Xcode rename → `mde` · inline code hybrid tokens · autosave DB snapshot (`notes.autosave.db`)
 
 ---
 
@@ -634,4 +669,5 @@ Formal acceptance tests. Run manually in Phase 1–3; automate where noted.
 | 0.1–0.4 | 2026-07-02 | Initial structure, MDE rename, Xcode alignment |
 | 1.0 | 2026-07-02 | Syntax spec, vault model, resolved OQs, platform matrix, traceability, 15 test cases, security/a11y, expanded FRs, design tokens, optimized structure |
 | 1.1 | 2026-07-02 | Phase 1 implemented: markdown editor, tags, FTS search, three-column macOS UI |
-| 1.2 | 2026-07-02 | v1 gap closure: iOS target, UITextView editor, FR-E05/E08/E09/E10, shortcuts, DB recovery UI, app icon, 39 unit tests |
+| 1.2 | 2026-07-02 | v1 gap closure: iOS target, UITextView editor, FR-E05/E08/E09/E10, shortcuts, DB recovery UI, app icon |
+| 1.3 | 2026-07-04 | v1.1 + hardening: SQLCipher, autosave snapshot recovery, inline code, graph/import/export, 82+ unit tests, all OQs closed, `meta.json` schema, GRDBCipher bootstrap |

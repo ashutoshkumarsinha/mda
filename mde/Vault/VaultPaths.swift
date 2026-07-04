@@ -26,4 +26,9 @@ enum VaultPaths {
     static func backupDatabaseURL(in packageURL: URL) -> URL {
         packageURL.appendingPathComponent("notes.backup.db", isDirectory: false)
     }
+
+    /// Rolling copy of `notes.db` from the last package flush (FR-D04).
+    static func autosaveSnapshotURL(in packageURL: URL) -> URL {
+        packageURL.appendingPathComponent("notes.autosave.db", isDirectory: false)
+    }
 }

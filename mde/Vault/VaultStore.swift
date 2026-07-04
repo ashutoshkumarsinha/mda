@@ -51,6 +51,8 @@ final class VaultStore {
 
     private(set) var isPackageAttached = false
     var needsDatabaseRecovery = false
+    private(set) var recoveryBackupAvailable = false
+    private(set) var recoveryAutosaveAvailable = false
 
     var autosaveErrorMessage: String? {
         get { editorState.autosaveErrorMessage }
@@ -119,12 +121,8 @@ final class VaultStore {
                     try meta.data().write(to: metaURL, options: .atomic)
                 }
             } catch {
-                let backupURL = VaultPaths.backupDatabaseURL(in: url)
-                if fileManager.fileExists(atPath: backupURL.path) {
-                    needsDatabaseRecovery = true
-                    throw VaultError.databaseCorrupt(backupAvailable: true)
-                }
-                throw error
+                markRecoveryNeeded(in: url)
+                throw recoveryError(for: url, underlying: error)
             }
         } else if let existing = dbQueue {
             let key = try databaseKeyStore.loadOrCreateKey(vaultID: meta.vaultID)
@@ -158,8 +156,25 @@ final class VaultStore {
 
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
         needsDatabaseRecovery = false
+        recoveryBackupAvailable = false
+        recoveryAutosaveAvailable = false
         isPackageAttached = true
+        try writeAutosaveSnapshot()
         try refreshAll()
+    }
+
+    enum DatabaseRecoverySource {
+        case migrationBackup
+        case autosaveSnapshot
+    }
+
+    func restoreDatabase(from source: DatabaseRecoverySource) throws {
+        switch source {
+        case .migrationBackup:
+            try restoreDatabaseFromBackup()
+        case .autosaveSnapshot:
+            try restoreDatabaseFromAutosaveSnapshot()
+        }
     }
 
     func restoreDatabaseFromBackup() throws {
@@ -170,13 +185,30 @@ final class VaultStore {
         let fileManager = FileManager.default
 
         guard fileManager.fileExists(atPath: backupURL.path) else {
-            throw VaultError.databaseCorrupt(backupAvailable: false)
+            throw VaultError.databaseCorrupt(backupAvailable: false, autosaveAvailable: false)
         }
 
-        if fileManager.fileExists(atPath: databaseURL.path) {
-            try fileManager.removeItem(at: databaseURL)
+        try replaceDatabase(at: databaseURL, from: backupURL)
+        try reopenPackageDatabase(at: databaseURL)
+    }
+
+    func restoreDatabaseFromAutosaveSnapshot() throws {
+        guard let packageURL else { throw VaultError.databaseUnavailable }
+
+        let databaseURL = VaultPaths.databaseURL(in: packageURL)
+        let autosaveURL = VaultPaths.autosaveSnapshotURL(in: packageURL)
+        let fileManager = FileManager.default
+
+        guard fileManager.fileExists(atPath: autosaveURL.path) else {
+            throw VaultError.databaseCorrupt(backupAvailable: false, autosaveAvailable: false)
         }
-        try fileManager.copyItem(at: backupURL, to: databaseURL)
+
+        try replaceDatabase(at: databaseURL, from: autosaveURL)
+        try reopenPackageDatabase(at: databaseURL)
+    }
+
+    private func reopenPackageDatabase(at databaseURL: URL) throws {
+        guard let packageURL else { throw VaultError.databaseUnavailable }
 
         dbQueue = try DatabaseEncryption.openPackageDatabase(
             at: databaseURL,
@@ -185,7 +217,10 @@ final class VaultStore {
         )
         try DatabaseSchema.migrate(dbQueue!, databaseURL: databaseURL)
         needsDatabaseRecovery = false
+        recoveryBackupAvailable = false
+        recoveryAutosaveAvailable = false
         autosaveErrorMessage = nil
+        try writeAutosaveSnapshot()
         try refreshAll()
     }
 
@@ -213,6 +248,7 @@ final class VaultStore {
 
         try PerformanceSignpost.measure(.vaultPersistPackage) {
             try meta.data().write(to: VaultPaths.metaURL(in: packageURL), options: .atomic)
+            try writeAutosaveSnapshot()
         }
         packageDirty = false
     }
@@ -1066,6 +1102,65 @@ final class VaultStore {
             tagTree = []
             titleIndex = [:]
         }
+    }
+
+    private func markRecoveryNeeded(in packageURL: URL) {
+        let fileManager = FileManager.default
+        recoveryBackupAvailable = fileManager.fileExists(atPath: VaultPaths.backupDatabaseURL(in: packageURL).path)
+        recoveryAutosaveAvailable = fileManager.fileExists(
+            atPath: VaultPaths.autosaveSnapshotURL(in: packageURL).path
+        )
+        if recoveryBackupAvailable || recoveryAutosaveAvailable {
+            needsDatabaseRecovery = true
+        }
+    }
+
+    private func recoveryError(for packageURL: URL, underlying: Error) -> VaultError {
+        if recoveryBackupAvailable || recoveryAutosaveAvailable {
+            return .databaseCorrupt(
+                backupAvailable: recoveryBackupAvailable,
+                autosaveAvailable: recoveryAutosaveAvailable
+            )
+        }
+        if let vaultError = underlying as? VaultError {
+            return vaultError
+        }
+        return .databaseCorrupt(backupAvailable: false, autosaveAvailable: false)
+    }
+
+    private func replaceDatabase(at databaseURL: URL, from sourceURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: databaseURL.path) {
+            try fileManager.removeItem(at: databaseURL)
+        }
+        try fileManager.copyItem(at: sourceURL, to: databaseURL)
+        for suffix in ["-wal", "-shm"] {
+            let sidecar = URL(fileURLWithPath: databaseURL.path + suffix)
+            if fileManager.fileExists(atPath: sidecar.path) {
+                try fileManager.removeItem(at: sidecar)
+            }
+        }
+    }
+
+    private func writeAutosaveSnapshot() throws {
+        guard let packageURL, isPackageAttached else { return }
+
+        let databaseURL = VaultPaths.databaseURL(in: packageURL)
+        let autosaveURL = VaultPaths.autosaveSnapshotURL(in: packageURL)
+        let fileManager = FileManager.default
+
+        guard fileManager.fileExists(atPath: databaseURL.path) else { return }
+
+        if let dbQueue {
+            try? dbQueue.read { db in
+                try db.execute(sql: "PRAGMA wal_checkpoint(PASSIVE)")
+            }
+        }
+
+        if fileManager.fileExists(atPath: autosaveURL.path) {
+            try fileManager.removeItem(at: autosaveURL)
+        }
+        try fileManager.copyItem(at: databaseURL, to: autosaveURL)
     }
 
     private static func ftsQuery(from userInput: String) -> String {

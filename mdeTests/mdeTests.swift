@@ -544,9 +544,42 @@ struct DatabaseRecoveryTests {
             #expect(recoveryStore.needsDatabaseRecovery)
         }
 
-        try recoveryStore.restoreDatabaseFromBackup()
+        try recoveryStore.restoreDatabase(from: .migrationBackup)
         #expect(recoveryStore.notes.contains { $0.title == "Recoverable" })
         #expect(recoveryStore.needsDatabaseRecovery == false)
+    }
+
+    @Test func restoresFromAutosaveSnapshotWhenDatabaseCorrupt() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let store = VaultStore()
+        _ = try store.createNote(title: "Autosaved", content: "Snapshot body")
+        try store.attachToPackage(at: tempDir)
+        try store.flushPackageIfNeeded()
+
+        let databaseURL = VaultPaths.databaseURL(in: tempDir)
+        let backupURL = VaultPaths.backupDatabaseURL(in: tempDir)
+        let autosaveURL = VaultPaths.autosaveSnapshotURL(in: tempDir)
+        #expect(FileManager.default.fileExists(atPath: autosaveURL.path))
+        try? FileManager.default.removeItem(at: backupURL)
+
+        try Data().write(to: databaseURL, options: .atomic)
+
+        let recoveryStore = VaultStore()
+        do {
+            try recoveryStore.attachToPackage(at: tempDir)
+            Issue.record("Expected corrupt database error")
+        } catch VaultError.databaseCorrupt {
+            #expect(recoveryStore.needsDatabaseRecovery)
+            #expect(recoveryStore.recoveryAutosaveAvailable)
+            #expect(recoveryStore.recoveryBackupAvailable == false)
+        }
+
+        try recoveryStore.restoreDatabase(from: .autosaveSnapshot)
+        #expect(recoveryStore.notes.contains { $0.title == "Autosaved" })
     }
 }
 
@@ -1353,6 +1386,22 @@ struct CompletionTests {
         #expect(constructs.contains { $0.kind == .blockquote })
         #expect(constructs.contains { $0.kind == .codeFence })
         #expect(constructs.contains { $0.kind == .codeBlockLine })
+    }
+
+    @Test func completionInlineCodeConstructOutsideFence() {
+        let text = "Use `let x = 1` in Swift.\n\n```\n`not inline`\n```\n"
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        let inline = constructs.filter { $0.kind == .inlineCode }
+        #expect(inline.count == 1)
+        #expect((text as NSString).substring(with: inline[0].contentRange!) == "let x = 1")
+    }
+
+    @Test func completionInlineCodeSuppressesNestedMarkdown() {
+        let text = "Literal `[[Not Link]]` and `#not-tag` here."
+        let constructs = MarkdownConstructScanner.constructs(in: text)
+        #expect(constructs.contains { $0.kind == .inlineCode })
+        #expect(constructs.contains { $0.kind == .wikilink } == false)
+        #expect(constructs.contains { $0.kind == .tag } == false)
     }
 
     @Test func completionListRevisionSkipsTailEdit() throws {

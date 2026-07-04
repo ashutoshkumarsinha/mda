@@ -92,16 +92,32 @@ enum MarkdownStyler {
         for construct in constructs {
             let isActive = active?.fullRange == construct.fullRange
 
-            for tokenRange in construct.tokenRanges {
-                let alpha: CGFloat = isActive ? 1.0 : tokenHiddenAlpha
-                storage.addAttribute(
-                    .foregroundColor,
-                    value: EditorPlatform.labelColor.withAlphaComponent(alpha),
-                    range: tokenRange
-                )
+            if construct.kind != .inlineCode {
+                for tokenRange in construct.tokenRanges {
+                    let alpha: CGFloat = isActive ? 1.0 : tokenHiddenAlpha
+                    storage.addAttribute(
+                        .foregroundColor,
+                        value: EditorPlatform.labelColor.withAlphaComponent(alpha),
+                        range: tokenRange
+                    )
+                }
             }
 
             switch construct.kind {
+            case .inlineCode:
+                for tokenRange in construct.tokenRanges {
+                    storage.addAttribute(
+                        .foregroundColor,
+                        value: EditorPlatform.labelColor,
+                        range: tokenRange
+                    )
+                }
+                if let contentRange = construct.contentRange {
+                    storage.addAttributes([
+                        .font: EditorPlatform.monospacedSystemFont(ofSize: options.baseFontSize - 1),
+                        .backgroundColor: EditorPlatform.quaternaryLabelColor.withAlphaComponent(0.12),
+                    ], range: contentRange)
+                }
             case .wikilink:
                 if let contentRange = construct.contentRange, !isActive {
                     storage.addAttributes([

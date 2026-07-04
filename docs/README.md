@@ -31,7 +31,9 @@ CI builds with `CODE_SIGNING_ALLOWED=NO` and do not need a team.
 
 ## Project status
 
-**v1 complete** — delivery phases 0–4 and optimization phases 0–7 implemented. See [spec §13](./spec.md#13-delivery-phases) and [optimization-plan.md](./optimization-plan.md).
+**v1 + v1.1 complete** — delivery phases 0–4 and optimization phases 0–7 implemented. See [spec §13](./spec.md#13-delivery-phases) and [optimization-plan.md](./optimization-plan.md).
+
+**First-time setup:** run `./scripts/setup-grdb-cipher.sh` (vendors GRDB into `Packages/GRDBCipher/` for SQLCipher).
 
 Open **`mde.xcodeproj`** — the app sources live in **`mde/`**.
 

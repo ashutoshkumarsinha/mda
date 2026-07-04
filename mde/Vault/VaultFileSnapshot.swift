@@ -45,7 +45,7 @@ struct VaultFileSnapshot: Sendable {
 enum VaultError: LocalizedError {
     case invalidPackage(String)
     case databaseUnavailable
-    case databaseCorrupt(backupAvailable: Bool)
+    case databaseCorrupt(backupAvailable: Bool, autosaveAvailable: Bool = false)
 
     var errorDescription: String? {
         switch self {
@@ -53,11 +53,17 @@ enum VaultError: LocalizedError {
             return "Invalid vault package: \(reason)"
         case .databaseUnavailable:
             return "Vault database is not available"
-        case .databaseCorrupt(let backupAvailable):
-            if backupAvailable {
-                return "The vault database appears damaged. You can restore from the last automatic backup."
+        case .databaseCorrupt(let backupAvailable, let autosaveAvailable):
+            switch (backupAvailable, autosaveAvailable) {
+            case (true, true):
+                return "The vault database appears damaged. You can restore from the migration backup or the last autosave snapshot."
+            case (true, false):
+                return "The vault database appears damaged. You can restore from the migration backup."
+            case (false, true):
+                return "The vault database appears damaged. You can restore from the last autosave snapshot."
+            case (false, false):
+                return "The vault database appears damaged and no recovery copy is available."
             }
-            return "The vault database appears damaged and no backup is available."
         }
     }
 }

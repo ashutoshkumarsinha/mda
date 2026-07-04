@@ -15,6 +15,7 @@ struct MarkdownConstruct {
         case blockquote
         case codeFence
         case codeBlockLine
+        case inlineCode
     }
 
     var kind: Kind
@@ -95,9 +96,13 @@ enum MarkdownConstructScanner {
             if lineLocation > nsText.length { break }
         }
 
-        result.append(contentsOf: wikiLinkConstructs(in: text))
-        result.append(contentsOf: boldConstructs(in: text))
-        result.append(contentsOf: tagConstructs(in: text))
+        let fenceExcluded = codeFenceExcludedRanges(in: text)
+        let inlineCodes = inlineCodeConstructs(in: text, excluding: fenceExcluded)
+        let literalExcluded = fenceExcluded + inlineCodes.map(\.fullRange)
+        result.append(contentsOf: wikiLinkConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: boldConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: tagConstructs(in: text, excluding: literalExcluded))
+        result.append(contentsOf: inlineCodes)
         return result
     }
 
@@ -109,8 +114,60 @@ enum MarkdownConstructScanner {
         constructs.filter { NSIntersectionRange($0.fullRange, range).length > 0 }
     }
 
-    private static func wikiLinkConstructs(in text: String) -> [MarkdownConstruct] {
-        WikiLinkExtractor.linkRanges(in: text).map { link in
+    private static func inlineCodeConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
+        guard let regex = try? NSRegularExpression(pattern: #"`([^`]+)`"#) else { return [] }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard !ranges(excluding, contain: match.range) else { return nil }
+            let open = NSRange(location: match.range.location, length: 1)
+            let close = NSRange(location: match.range.upperBound - 1, length: 1)
+            return MarkdownConstruct(
+                kind: .inlineCode,
+                fullRange: match.range,
+                tokenRanges: [open, close],
+                contentRange: match.range(at: 1)
+            )
+        }
+    }
+
+    /// Fenced blocks and inline `` ` `` spans — other constructs must not match inside.
+    private static func codeFenceExcludedRanges(in text: String) -> [NSRange] {
+        var ranges: [NSRange] = []
+        var lineLocation = 0
+        var fenceStart: Int?
+        let nsText = text as NSString
+
+        for line in text.components(separatedBy: "\n") {
+            let lineLength = (line as NSString).length
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("```") {
+                if let start = fenceStart {
+                    let end = lineLocation + lineLength
+                    ranges.append(NSRange(location: start, length: end - start))
+                    fenceStart = nil
+                } else {
+                    fenceStart = lineLocation
+                }
+            }
+
+            lineLocation += lineLength + 1
+            if lineLocation > nsText.length { break }
+        }
+
+        if let start = fenceStart {
+            ranges.append(NSRange(location: start, length: nsText.length - start))
+        }
+        return ranges
+    }
+
+    private static func ranges(_ ranges: [NSRange], contain target: NSRange) -> Bool {
+        ranges.contains { NSIntersectionRange($0, target).length > 0 }
+    }
+
+    private static func wikiLinkConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
+        WikiLinkExtractor.linkRanges(in: text).compactMap { link in
+            guard !ranges(excluding, contain: link.fullRange) else { return nil }
             let open = NSRange(location: link.fullRange.location, length: 2)
             let close = NSRange(location: link.fullRange.upperBound - 2, length: 2)
             return MarkdownConstruct(
@@ -122,10 +179,11 @@ enum MarkdownConstructScanner {
         }
     }
 
-    private static func boldConstructs(in text: String) -> [MarkdownConstruct] {
+    private static func boldConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
         guard let regex = try? NSRegularExpression(pattern: #"\*\*([^*]+)\*\*"#) else { return [] }
         let nsText = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard !ranges(excluding, contain: match.range) else { return nil }
             let open = NSRange(location: match.range.location, length: 2)
             let close = NSRange(location: match.range.upperBound - 2, length: 2)
             return MarkdownConstruct(
@@ -137,11 +195,12 @@ enum MarkdownConstructScanner {
         }
     }
 
-    private static func tagConstructs(in text: String) -> [MarkdownConstruct] {
+    private static func tagConstructs(in text: String, excluding: [NSRange]) -> [MarkdownConstruct] {
         guard let regex = try? NSRegularExpression(pattern: #"#([A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)"#) else { return [] }
         let nsText = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
-            MarkdownConstruct(
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap { match in
+            guard !ranges(excluding, contain: match.range) else { return nil }
+            return MarkdownConstruct(
                 kind: .tag,
                 fullRange: match.range,
                 tokenRanges: [NSRange(location: match.range.location, length: 1)],
