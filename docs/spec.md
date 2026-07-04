@@ -105,7 +105,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 
 | In v1 | v1.1 *(shipped)* | v2+ |
 |-------|------------------|-----|
-| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Per-note vault folder export zip |
+| Note CRUD, tags, WikiLinks, FTS | Export single note + full vault markdown export | Package / zip export with `notes/`, `assets/`, `meta.json` ✅ |
 | Backlinks panel (on-demand) | Multi-window macOS (`DocumentGroup`) | Import Obsidian/Notion folders |
 | CloudKit sync + payload encryption | Soft-delete purge UI, Markdown import | Images, tables, plugins |
 | Hybrid editor (headings–checkboxes, inline code) | Code fences, blockquotes, wiki graph (force layout) | Plugin marketplace |

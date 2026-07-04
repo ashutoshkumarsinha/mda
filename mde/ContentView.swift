@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var vaultExportDocument = MarkdownExportDocument()
     @State private var showVaultFolderExport = false
     @State private var vaultFolderExportDocument = VaultFolderExportDocument()
+    @State private var showVaultZipExport = false
+    @State private var vaultZipExportDocument = VaultZipExportDocument()
     @State private var showMarkdownImport = false
     @State private var importError: String?
 
@@ -98,7 +100,12 @@ struct ContentView: View {
                     Button {
                         prepareVaultFolderExport()
                     } label: {
-                        Label("Export Vault (Folder)…", systemImage: "square.and.arrow.up.on.square")
+                        Label("Export Vault (Package)…", systemImage: "square.and.arrow.up.on.square")
+                    }
+                    Button {
+                        prepareVaultZipExport()
+                    } label: {
+                        Label("Export Vault (Zip)…", systemImage: "doc.zipper")
                     }
                     Button {
                         showMarkdownImport = true
@@ -132,6 +139,16 @@ struct ContentView: View {
             document: vaultFolderExportDocument,
             contentType: .folder,
             defaultFilename: "vault-export"
+        ) { result in
+            if case .failure(let error) = result {
+                importError = error.localizedDescription
+            }
+        }
+        .fileExporter(
+            isPresented: $showVaultZipExport,
+            document: vaultZipExportDocument,
+            contentType: .zip,
+            defaultFilename: "vault-export.zip"
         ) { result in
             if case .failure(let error) = result {
                 importError = error.localizedDescription
@@ -402,9 +419,19 @@ struct ContentView: View {
 
     private func prepareVaultFolderExport() {
         do {
-            let wrapper = try store.makeVaultMarkdownExportWrapper()
+            let wrapper = try store.makeVaultPackageExportWrapper()
             vaultFolderExportDocument = VaultFolderExportDocument(wrapper: wrapper)
             showVaultFolderExport = true
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func prepareVaultZipExport() {
+        do {
+            let data = try store.makeVaultZipExportData()
+            vaultZipExportDocument = VaultZipExportDocument(data: data)
+            showVaultZipExport = true
         } catch {
             importError = error.localizedDescription
         }

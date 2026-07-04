@@ -426,7 +426,7 @@ struct AccessibilityTests {
         #expect(AccessibilityLabels.noteList == "Notes")
         #expect(AccessibilityLabels.trashList == "Trash")
         #expect(AccessibilityLabels.noteEditor == "Note editor")
-        #expect(AccessibilityLabels.exportNote == "Export note as Markdown")
+        #expect(AccessibilityLabels.exportNote == "Export note")
         #expect(AccessibilityLabels.emptyBacklinks == "No notes link here yet")
         #expect(AccessibilityLabels.tagFilter(path: "inbox", isSelected: true).contains("inbox"))
         #expect(AccessibilityLabels.noteRow(
@@ -1422,11 +1422,13 @@ struct CompletionTests {
         let store = VaultStore()
         _ = try store.createNote(title: "Alpha", content: "One")
         _ = try store.createNote(title: "Beta", content: "Two")
-        let wrapper = try store.makeVaultMarkdownExportWrapper()
+        let wrapper = try store.makeVaultPackageExportWrapper()
         #expect(wrapper.isDirectory)
-        let files = wrapper.fileWrappers?.keys.sorted() ?? []
-        #expect(files.count == 2)
-        #expect(files.allSatisfy { $0.hasSuffix(".md") })
+        #expect(wrapper.fileWrappers?["meta.json"] != nil)
+        #expect(wrapper.fileWrappers?["notes"]?.isDirectory == true)
+        let noteFiles = wrapper.fileWrappers?["notes"]?.fileWrappers?.keys.sorted() ?? []
+        #expect(noteFiles.count == 2)
+        #expect(noteFiles.allSatisfy { $0.hasSuffix(".md") })
     }
 
     @Test func completionRegressionGateUsesPersistedBaselines() throws {
@@ -1651,5 +1653,78 @@ struct MarkdownTableTests {
         let boldMid = bold!.fullRange.location + 1
         let active = MarkdownConstructScanner.constructContaining(location: boldMid, in: constructs)
         #expect(active?.kind == .bold)
+    }
+}
+
+// MARK: - v2.3 export packaging
+
+struct VaultExportTests {
+
+    @Test func packageExportWritesManifestAndNotes() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Alpha", content: "Body")
+        let wrapper = try store.makeVaultPackageExportWrapper()
+        let manifestData = try #require(wrapper.fileWrappers?["meta.json"]?.regularFileContents)
+        let manifest = try VaultExportManifest.decode(from: manifestData)
+        #expect(manifest.exportVersion == 1)
+        #expect(manifest.notes.count == 1)
+        #expect(manifest.notes[0].path.hasPrefix("notes/"))
+    }
+
+    @Test func packageExportIncludesLinkedAssets() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mde")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let pngBytes = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        ])
+        let imageURL = FileManager.default.temporaryDirectory.appendingPathComponent("chart.png")
+        try pngBytes.write(to: imageURL)
+        defer { try? FileManager.default.removeItem(at: imageURL) }
+
+        let store = VaultStore()
+        try store.attachToPackage(at: tempDir)
+        let note = try store.createNote(title: "Diagram", content: "")
+        let markdown = try store.importImage(from: imageURL, intoNoteID: note.id, altText: "Chart")
+        _ = try store.updateNote(id: note.id, content: markdown)
+
+        let wrapper = try store.makeNotePackageExportWrapper(noteID: note.id)
+        let filename = store.exportFilename(for: note.id)
+        #expect(wrapper.fileWrappers?["assets"]?.isDirectory == true)
+        #expect(wrapper.fileWrappers?[filename] != nil)
+        let manifest = try VaultExportManifest.decode(from: #require(wrapper.fileWrappers?["meta.json"]?.regularFileContents))
+        #expect(manifest.assets.count == 1)
+    }
+
+    @Test func zipExportBuildsPKZipArchive() throws {
+        let store = VaultStore()
+        _ = try store.createNote(title: "Zip", content: "Packed")
+        let zip = try store.makeVaultZipExportData()
+        #expect(zip.starts(with: [0x50, 0x4B, 0x03, 0x04]))
+        #expect(zip.count > 100)
+    }
+
+    @Test func noteZipExportBuildsArchive() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "One", content: "Only")
+        let zip = try store.makeNoteZipExportData(noteID: note.id)
+        #expect(zip.starts(with: [0x50, 0x4B, 0x03, 0x04]))
+    }
+
+    @Test func packageExportRequiresPackageForAssets() throws {
+        let store = VaultStore()
+        let note = try store.createNote(
+            title: "Missing Asset",
+            content: "![x](assets/missing.png)"
+        )
+        do {
+            _ = try store.makeNotePackageExportWrapper(noteID: note.id)
+            Issue.record("Expected assetsUnavailable")
+        } catch VaultExportError.assetsUnavailable {
+            #expect(Bool(true))
+        }
     }
 }

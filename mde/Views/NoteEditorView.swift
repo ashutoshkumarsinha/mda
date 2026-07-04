@@ -25,8 +25,12 @@ struct NoteEditorView: View {
     @State private var pendingWikiLinkTitle: String?
     @State private var showCreateWikiLinkSheet = false
     @State private var showExportPicker = false
+    @State private var showNotePackageExport = false
+    @State private var showNoteZipExport = false
     @State private var showImageImporter = false
     @State private var exportDocument = MarkdownExportDocument()
+    @State private var notePackageExportDocument = VaultFolderExportDocument()
+    @State private var noteZipExportDocument = VaultZipExportDocument()
     @State private var editorSummary: NoteListItem?
     @State private var isTrashedNote = false
 
@@ -62,6 +66,26 @@ struct NoteEditorView: View {
             document: exportDocument,
             contentType: .plainText,
             defaultFilename: noteID.map { store.exportFilename(for: $0) } ?? "Note.md"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
+            }
+        }
+        .fileExporter(
+            isPresented: $showNotePackageExport,
+            document: notePackageExportDocument,
+            contentType: .folder,
+            defaultFilename: noteID.map { store.exportFilename(for: $0).replacingOccurrences(of: ".md", with: "") } ?? "note-export"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
+            }
+        }
+        .fileExporter(
+            isPresented: $showNoteZipExport,
+            document: noteZipExportDocument,
+            contentType: .zip,
+            defaultFilename: noteID.map { store.exportFilename(for: $0).replacingOccurrences(of: ".md", with: ".zip") } ?? "note-export.zip"
         ) { result in
             if case .failure(let error) = result {
                 errorMessage = error.localizedDescription
@@ -166,13 +190,27 @@ struct NoteEditorView: View {
                         .help(store.isPackageAttached ? "Insert image from file" : "Save vault to disk before adding images")
                     }
                     ToolbarItem {
-                        Button {
-                            prepareExport(noteID: activeNoteID)
+                        Menu {
+                            Button {
+                                prepareMarkdownExport(noteID: activeNoteID)
+                            } label: {
+                                Label("Markdown File…", systemImage: "doc.text")
+                            }
+                            Button {
+                                prepareNotePackageExport(noteID: activeNoteID)
+                            } label: {
+                                Label("Package (Folder)…", systemImage: "folder")
+                            }
+                            Button {
+                                prepareNoteZipExport(noteID: activeNoteID)
+                            } label: {
+                                Label("Package (Zip)…", systemImage: "doc.zipper")
+                            }
                         } label: {
                             Label("Export", systemImage: "square.and.arrow.up")
                         }
                         .accessibilityLabel(AccessibilityLabels.exportNote)
-                        .help("Export note as Markdown")
+                        .help("Export note as Markdown or package with assets")
                     }
                 }
                 .fileImporter(
@@ -322,11 +360,31 @@ struct NoteEditorView: View {
         }
     }
 
-    private func prepareExport(noteID: String) {
+    private func prepareMarkdownExport(noteID: String) {
         do {
             let markdown = try store.exportNoteAsMarkdown(id: noteID)
             exportDocument = MarkdownExportDocument(text: markdown)
             showExportPicker = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareNotePackageExport(noteID: String) {
+        do {
+            let wrapper = try store.makeNotePackageExportWrapper(noteID: noteID)
+            notePackageExportDocument = VaultFolderExportDocument(wrapper: wrapper)
+            showNotePackageExport = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareNoteZipExport(noteID: String) {
+        do {
+            let data = try store.makeNoteZipExportData(noteID: noteID)
+            noteZipExportDocument = VaultZipExportDocument(data: data)
+            showNoteZipExport = true
         } catch {
             errorMessage = error.localizedDescription
         }

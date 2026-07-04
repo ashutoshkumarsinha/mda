@@ -1,6 +1,6 @@
 # MDE — v2 Roadmap
 
-> **Status:** v2.0–v2.2 complete (2026-07-04)  
+> **Status:** v2.0–v2.3 complete (2026-07-04)  
 > **Companion:** [spec.md](./spec.md) §4.2 · [optimization-plan.md](./optimization-plan.md)
 
 v1 and v1.1 are complete. v2 expands the content model (images, tables), import fidelity, and export packaging — without plugins or a marketplace (still non-goals).
@@ -44,10 +44,10 @@ v1 and v1.1 are complete. v2 expands the content model (images, tables), import 
 - ✅ GFM pipe tables in parser + hybrid styled preview (header bold, faded pipes when caret outside)
 - ✅ No cell editing UX — render-only while editing raw markdown
 
-### v2.3 — Export packaging
+### v2.3 — Export packaging *(complete)*
 
-- Zip export: `notes/*.md` + `assets/` + `meta.json` manifest
-- Per-note folder export (single note + its assets)
+- ✅ Zip export: `notes/*.md` + `assets/` + `meta.json` manifest
+- ✅ Per-note folder / zip export (note markdown + linked assets)
 
 ### v2.4 — Asset sync
 
