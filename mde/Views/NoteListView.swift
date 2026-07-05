@@ -113,7 +113,8 @@ struct NoteListView: View {
                         Label("Today", systemImage: "calendar")
                     }
                     .accessibilityLabel("Open today's note")
-                    .help("Open or create today's daily note")
+                    .help("Open or create today's daily note (⌘⇧D)")
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
                 }
 
                 ToolbarItem {
@@ -412,6 +413,10 @@ struct NoteListView: View {
     }
 
     private func createNote(from template: NoteTemplate) {
+        if template == .daily {
+            openTodayNote()
+            return
+        }
         do {
             let note = try store.createNote(content: template.content)
             selectedNoteID = note.id

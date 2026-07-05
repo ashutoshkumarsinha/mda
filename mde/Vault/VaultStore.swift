@@ -735,12 +735,18 @@ final class VaultStore {
         let count = try deletedNoteCount()
         guard count > 0 else { return 0 }
 
+        let deletedIDs: [String]
+        deletedIDs = try dbQueue.read { db in
+            try String.fetchAll(db, sql: "SELECT id FROM note WHERE is_deleted = 1")
+        }
         try dbQueue.write { db in
-            let ids = try String.fetchAll(db, sql: "SELECT id FROM note WHERE is_deleted = 1")
-            for id in ids {
+            for id in deletedIDs {
                 try purgeAuxiliaryRows(for: id, in: db)
             }
             try db.execute(sql: "DELETE FROM note WHERE is_deleted = 1")
+        }
+        for id in deletedIDs {
+            SpotlightIndexer.deleteNote(noteID: id, vaultID: meta.vaultID)
         }
         if packageURL != nil {
             try dbQueue.write { db in
@@ -1089,6 +1095,7 @@ final class VaultStore {
         }
 
         SpotlightIndexer.indexNote(note, vaultID: meta.vaultID)
+        updateGlanceSnapshot(for: note)
     }
 
     private func insertSummarySorted(_ item: NoteListItem) {
@@ -1261,16 +1268,29 @@ final class VaultStore {
         }
         if let id {
             if let note = try fetchNote(id: id) {
+                updateGlanceSnapshot(for: note)
                 return note
             }
             if try fetchNote(id: id, includeDeleted: true)?.isDeleted == true {
                 try restoreNote(id: id)
                 if let note = try fetchNote(id: id) {
+                    updateGlanceSnapshot(for: note)
                     return note
                 }
             }
         }
-        return try createNote(title: title, content: DailyNoteHelper.defaultContent(for: date))
+        let created = try createNote(title: title, content: DailyNoteHelper.defaultContent(for: date))
+        updateGlanceSnapshot(for: created)
+        return created
+    }
+
+    func updateGlanceSnapshot(for note: Note) {
+        guard DailyNoteHelper.isDailyNoteTitle(note.title) else { return }
+        VaultGlanceStore.writeDailyNote(
+            vaultID: meta.vaultID,
+            title: note.title,
+            snippet: NoteListItem.makeSnippet(from: note.content)
+        )
     }
 
     private func noteIDFromDatabase(forTitle title: String, includeDeleted: Bool) throws -> String? {

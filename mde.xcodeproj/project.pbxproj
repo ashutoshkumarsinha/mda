@@ -11,6 +11,9 @@
 		024BE4302FF72AE600DE451E /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 027481332FED070900B678AB /* GRDB */; };
 		024BE5112FF7406D00DE451E /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 027481352FED070900B678AB /* Markdown */; };
 		024BE5122FF7406D00DE451E /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+
+		A1D001010021 /* mdeShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1D001010001 /* mdeShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1D001020021 /* mdeWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1D001020001 /* mdeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,11 +31,30 @@
 			remoteGlobalIDString = 027481002FED070800B678AB;
 			remoteInfo = mde;
 		};
+
+		A1D001010030 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 027480F92FED070800B678AB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1D001010003;
+			remoteInfo = mdeShareExtension;
+		};
+		A1D001020030 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 027480F92FED070800B678AB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1D001020003;
+			remoteInfo = mdeWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		027481012FED070800B678AB /* mde.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mde.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		027481112FED070900B678AB /* mdeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		
+		A1D001010001 /* mdeShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = mdeShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1D001020001 /* mdeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = mdeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1D001030001 /* mdeWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mdeWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0274811B2FED070900B678AB /* mdeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = mdeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		027481AA2FED099900B678AB /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -47,6 +69,22 @@
 				PrivacyInfo.xcprivacy,
 			);
 			target = 027481002FED070800B678AB /* mde */;
+		};
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section additions */
+		A1D001010002 /* Exceptions for "mdeShareExtension" folder in "mdeShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A1D001010003 /* mdeShareExtension */;
+		};
+		A1D001020002 /* Exceptions for "mdeWidgetExtension" folder in "mdeWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A1D001020003 /* mdeWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -67,6 +105,28 @@
 		0274811E2FED070900B678AB /* mdeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = mdeUITests;
+			sourceTree = "<group>";
+		};
+
+		A1D001010004 /* mdeShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1D001010002 /* Exceptions for "mdeShareExtension" folder in "mdeShareExtension" target */,
+			);
+			path = mdeShareExtension;
+			sourceTree = "<group>";
+		};
+		A1D001020004 /* mdeWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1D001020002 /* Exceptions for "mdeWidgetExtension" folder in "mdeWidgetExtension" target */,
+			);
+			path = mdeWidgetExtension;
+			sourceTree = "<group>";
+		};
+		A1D001030004 /* mdeWatchApp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = mdeWatchApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -105,6 +165,9 @@
 			children = (
 				027481AB2FED099900B678AB /* Config */,
 				027481032FED070800B678AB /* mde */,
+				A1D001010004 /* mdeShareExtension */,
+				A1D001020004 /* mdeWidgetExtension */,
+				A1D001030004 /* mdeWatchApp */,
 				027481142FED070900B678AB /* mdeTests */,
 				0274811E2FED070900B678AB /* mdeUITests */,
 				027481022FED070800B678AB /* Products */,
@@ -115,6 +178,9 @@
 			isa = PBXGroup;
 			children = (
 				027481012FED070800B678AB /* mde.app */,
+				A1D001010001 /* mdeShareExtension.appex */,
+				A1D001020001 /* mdeWidgetExtension.appex */,
+				A1D001030001 /* mdeWatchApp.app */,
 				027481112FED070900B678AB /* mdeTests.xctest */,
 				0274811B2FED070900B678AB /* mdeUITests.xctest */,
 			);
@@ -140,10 +206,13 @@
 				027480FD2FED070800B678AB /* Sources */,
 				027480FE2FED070800B678AB /* Frameworks */,
 				027480FF2FED070800B678AB /* Resources */,
+				A1D001010020 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1D001010031 /* PBXTargetDependency */,
+				A1D001020031 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				027481032FED070800B678AB /* mde */,
@@ -204,6 +273,67 @@
 			productReference = 0274811B2FED070900B678AB /* mdeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+
+		A1D001010003 /* mdeShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D001010040 /* Build configuration list for PBXNativeTarget "mdeShareExtension" */;
+			buildPhases = (
+				A1D001010005 /* Sources */,
+				A1D001010006 /* Frameworks */,
+				A1D001010007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D001010004 /* mdeShareExtension */,
+			);
+			name = mdeShareExtension;
+			productName = mdeShareExtension;
+			productReference = A1D001010001 /* mdeShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A1D001020003 /* mdeWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D001020040 /* Build configuration list for PBXNativeTarget "mdeWidgetExtension" */;
+			buildPhases = (
+				A1D001020005 /* Sources */,
+				A1D001020006 /* Frameworks */,
+				A1D001020007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D001020004 /* mdeWidgetExtension */,
+			);
+			name = mdeWidgetExtension;
+			productName = mdeWidgetExtension;
+			productReference = A1D001020001 /* mdeWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A1D001030003 /* mdeWatchApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1D001030040 /* Build configuration list for PBXNativeTarget "mdeWatchApp" */;
+			buildPhases = (
+				A1D001030005 /* Sources */,
+				A1D001030006 /* Frameworks */,
+				A1D001030007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1D001030004 /* mdeWatchApp */,
+			);
+			name = mdeWatchApp;
+			productName = mdeWatchApp;
+			productReference = A1D001030001 /* mdeWatchApp.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -246,6 +376,9 @@
 			projectRoot = "";
 			targets = (
 				027481002FED070800B678AB /* mde */,
+				A1D001010003 /* mdeShareExtension */,
+				A1D001020003 /* mdeWidgetExtension */,
+				A1D001030003 /* mdeWatchApp */,
 				027481102FED070900B678AB /* mdeTests */,
 				0274811A2FED070900B678AB /* mdeUITests */,
 			);
@@ -274,6 +407,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1D001010020 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1D001010021 /* mdeShareExtension.appex in Embed Foundation Extensions */,
+				A1D001020021 /* mdeWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -298,6 +446,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+
+		A1D001010005 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001010006 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001010007 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001020005 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001020006 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001020007 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001030005 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001030006 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
+		A1D001030007 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ( ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -310,6 +468,18 @@
 			isa = PBXTargetDependency;
 			target = 027481002FED070800B678AB /* mde */;
 			targetProxy = 0274811C2FED070900B678AB /* PBXContainerItemProxy */;
+		};
+
+		A1D001010031 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = A1D001010003 /* mdeShareExtension */;
+			targetProxy = A1D001010030 /* PBXContainerItemProxy */;
+		};
+		A1D001020031 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1D001020003 /* mdeWidgetExtension */;
+			targetProxy = A1D001020030 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -649,6 +819,140 @@
 				0274812D2FED070900B678AB /* Debug */,
 				0274812E2FED070900B678AB /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+
+		A1D001010041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = mdeShareExtension/mdeShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = mdeShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1D001010042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = mdeShareExtension/mdeShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = mdeShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1D001010040 /* Build configuration list for PBXNativeTarget "mdeShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = ( A1D001010041 /* Debug */, A1D001010042 /* Release */ );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1D001020041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = mdeWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", "@executable_path/../../../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1D001020042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = mdeWidgetExtension/mdeWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = mdeWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", "@executable_path/../../../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1D001020040 /* Build configuration list for PBXNativeTarget "mdeWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = ( A1D001020041 /* Debug */, A1D001020042 /* Release */ );
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1D001030041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		A1D001030042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = name.aks.mde.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		A1D001030040 /* Build configuration list for PBXNativeTarget "mdeWatchApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = ( A1D001030041 /* Debug */, A1D001030042 /* Release */ );
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

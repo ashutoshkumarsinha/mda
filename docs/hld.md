@@ -66,6 +66,12 @@ MDE uses a native, local-first architecture built on the Apple ecosystem. The cl
 - **Data unit:** Notes are broken down into metadata records and text delta records using state-based CRDTs.
 - **Zero-knowledge encryption:** The client generates a unique symmetric key stored securely in the local Apple Keychain. Text content is encrypted using `CryptoKit.AES.GCM` before transmission. CloudKit only manages raw encrypted data blocks; Apple cannot read the note text.
 
+### 2.5 Platform integrations (v5–v6)
+
+- **Core Spotlight:** `SpotlightIndexer` writes `CSSearchableItem` entries keyed `vaultID/noteID`. `SpotlightDeepLink` handles `com.apple.corespotlightitem` continuations to select the note in the active vault.
+- **Glance data:** `VaultGlanceStore` writes daily-note title/snippet to App Group `group.name.aks.mde` for Widget and Watch targets.
+- **Extensions:** `mdeShareExtension` (iOS share sheet → pending text), `mdeWidgetExtension` (WidgetKit timeline), `mdeWatchApp` (watchOS glance).
+
 ---
 
 ## 3. GUI Design Specification

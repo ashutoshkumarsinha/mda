@@ -72,6 +72,7 @@ struct SyncConflictBanner: View {
     let conflict: NoteConflict
     let onKeepLocal: () -> Void
     let onKeepCloud: () -> Void
+    @State private var showDiff = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -80,6 +81,7 @@ struct SyncConflictBanner: View {
             Text("This note changed on another device.")
                 .font(.subheadline)
             Spacer()
+            Button("Compare") { showDiff = true }
             Button("Keep Local", action: onKeepLocal)
             Button("Keep Cloud", action: onKeepCloud)
         }
@@ -87,6 +89,13 @@ struct SyncConflictBanner: View {
         .background(.orange.opacity(0.12))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Sync conflict. This note changed on another device.")
+        .sheet(isPresented: $showDiff) {
+            SyncConflictDiffView(
+                conflict: conflict,
+                onKeepLocal: onKeepLocal,
+                onKeepCloud: onKeepCloud
+            )
+        }
     }
 }
 

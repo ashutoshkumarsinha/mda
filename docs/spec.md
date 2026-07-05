@@ -55,7 +55,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **v4 complete** (smart import merge, editor polish, templates, graph search). **v5 complete** (daily notes, Spotlight indexing, PDF export, Notion import). **125+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
+**Current state:** v1–v5 complete. **v6 complete** (Spotlight deep link, Share/Widget/Watch extensions, conflict diff, Notion HTML). **135+ automated unit tests** + iOS UI smoke in CI.
 
 ### Differentiation (v1)
 
@@ -300,6 +300,21 @@ MyVault.mde/
 | FR-Y05 | Full offline use; eventual sync on reconnect | MUST |
 | FR-Y06 | Sync status indicator in toolbar | MUST |
 | FR-Y07 | Unmergeable conflict → banner with keep-local / keep-cloud | MUST |
+| FR-Y08 | Conflict compare sheet showing local vs cloud note bodies | SHOULD ✅ |
+
+### 7.8 Capture & platform (v5–v6)
+
+| ID | Requirement | Pri |
+|----|-------------|-----|
+| FR-C01 | Daily notes with ISO titles (`yyyy-MM-dd`); open-or-create Today | MUST ✅ |
+| FR-C02 | WikiLink to date title opens daily note | MUST ✅ |
+| FR-C03 | Core Spotlight index active notes; remove on delete | MUST ✅ |
+| FR-C04 | Spotlight result opens note in vault | MUST ✅ |
+| FR-C05 | Export single note as plain-text PDF | MUST ✅ |
+| FR-C06 | Import Notion markdown/HTML folder export | MUST ✅ |
+| FR-C07 | iOS Share extension saves text to vault on next open | SHOULD ✅ |
+| FR-C08 | Widget shows today's daily note title + snippet | SHOULD ✅ |
+| FR-C09 | watchOS app shows daily note glance | SHOULD ✅ |
 
 ### 7.7 UI
 
@@ -695,6 +710,10 @@ Phased v4 delivery is documented in **[v4-roadmap.md](./v4-roadmap.md)**. v4.0�
 
 Phased v5 delivery is documented in **[v5-roadmap.md](./v5-roadmap.md)**. v5.0–v5.3 are complete: daily notes, Core Spotlight indexing, PDF export, and Notion folder import.
 
+## v6 roadmap
+
+Phased v6 delivery is documented in **[v6-roadmap.md](./v6-roadmap.md)**. v6.0–v6.2 are complete: Spotlight deep links, import/sync polish, Share extension, Widget, and Watch glance.
+
 ---
 
 ## 19. Glossary
@@ -727,3 +746,4 @@ Phased v5 delivery is documented in **[v5-roadmap.md](./v5-roadmap.md)**. v5.0�
 | 1.6 | 2026-07-04 | v3 complete: package/zip import, external links, WikiLink aliases |
 | 1.7 | 2026-07-04 | v4 complete: smart import merge, editor polish, templates, graph search |
 | 1.8 | 2026-07-04 | v5 complete: daily notes, Spotlight indexing, PDF export, Notion import |
+| 1.9 | 2026-07-04 | v6 complete: Spotlight deep link, extensions, conflict diff, Notion HTML |

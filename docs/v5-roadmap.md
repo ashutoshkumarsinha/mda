@@ -34,9 +34,9 @@ v5 adds capture workflows (daily notes), system discoverability (Spotlight), pri
 
 ---
 
-## Backlog (v6+)
+## Backlog (v7+)
 
-Notion HTML export · iOS Share extension · Widget glance · CRDT diff UI · Watch app
+Rich PDF markdown rendering · Notion block-level HTML · watchOS complications · macOS Share menu · App Intents
 
 ---
 

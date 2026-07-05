@@ -10,6 +10,7 @@ struct ContentView: View {
     @Bindable var store: VaultStore
     /// When false, sync bootstrap waits until the vault package is attached on disk.
     var isPackageBound: Bool = true
+    @Binding var pendingSpotlightNoteID: String?
 
     @State private var selectedTagPath: String?
     @State private var selectedNoteID: String?
@@ -36,6 +37,16 @@ struct ContentView: View {
     private struct PendingPackageImport {
         var url: URL
         var isZip: Bool
+    }
+
+    init(
+        store: VaultStore,
+        isPackageBound: Bool = true,
+        pendingSpotlightNoteID: Binding<String?> = .constant(nil)
+    ) {
+        self.store = store
+        self.isPackageBound = isPackageBound
+        self._pendingSpotlightNoteID = pendingSpotlightNoteID
     }
 
     #if DEBUG
@@ -253,6 +264,11 @@ struct ContentView: View {
         }
         .onAppear {
             showRecoveryAlert = store.needsDatabaseRecovery
+            consumePendingShare()
+            applyPendingSpotlightSelection()
+        }
+        .onChange(of: pendingSpotlightNoteID) { _, _ in
+            applyPendingSpotlightSelection()
         }
         .vaultPackageLifecycle(store: store)
         .background {
@@ -475,6 +491,27 @@ struct ContentView: View {
             let data = try store.makeVaultZipExportData()
             vaultZipExportDocument = VaultZipExportDocument(data: data)
             showVaultZipExport = true
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func applyPendingSpotlightSelection() {
+        guard let noteID = pendingSpotlightNoteID else { return }
+        pendingSpotlightNoteID = nil
+        selectedNoteID = noteID
+    }
+
+    private func consumePendingShare() {
+        guard let text = VaultGlanceStore.pendingShareText?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return }
+        VaultGlanceStore.pendingShareText = nil
+        do {
+            let note = try store.createNote(content: text)
+            selectedNoteID = note.id
+            try store.flushPackageIfNeeded()
+            importBannerMessage = "Saved shared text as a new note."
         } catch {
             importError = error.localizedDescription
         }

@@ -47,9 +47,14 @@ private struct VaultDocumentView: View {
     @ObservedObject var document: VaultDocument
     let configuration: ReferenceFileDocumentConfiguration<VaultDocument>
     @State private var isPackageBound = false
+    @State private var pendingSpotlightNoteID: String?
 
     var body: some View {
-        ContentView(store: document.store, isPackageBound: isPackageBound)
+        ContentView(
+            store: document.store,
+            isPackageBound: isPackageBound,
+            pendingSpotlightNoteID: $pendingSpotlightNoteID
+        )
             .onAppear {
                 document.bindToPackageIfNeeded(url: configuration.fileURL)
                 isPackageBound = document.store.isPackageAttached
@@ -57,6 +62,11 @@ private struct VaultDocumentView: View {
             .onChange(of: configuration.fileURL) { _, newURL in
                 document.bindToPackageIfNeeded(url: newURL)
                 isPackageBound = document.store.isPackageAttached
+            }
+            .onContinueUserActivity(SpotlightDeepLink.activityType) { activity in
+                guard let target = SpotlightDeepLink.target(from: activity),
+                      target.vaultID == document.store.meta.vaultID else { return }
+                pendingSpotlightNoteID = target.noteID
             }
     }
 }

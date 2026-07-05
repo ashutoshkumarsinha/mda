@@ -1979,6 +1979,58 @@ struct V5ImportExportTests {
     }
 }
 
+// MARK: - v5.1 Spotlight
+
+struct SpotlightDeepLinkTests {
+
+    @Test func parsesIdentifier() {
+        let target = SpotlightDeepLink.target(fromIdentifier: "vault-1/note-abc")
+        #expect(target?.vaultID == "vault-1")
+        #expect(target?.noteID == "note-abc")
+    }
+
+    @Test func rejectsMalformedIdentifier() {
+        #expect(SpotlightDeepLink.target(fromIdentifier: "invalid") == nil)
+    }
+}
+
+struct NotionHtmlConverterTests {
+
+    @Test func convertsHeadingAndParagraph() {
+        let html = "<h1>Title</h1><p>Body text</p>"
+        let markdown = NotionHtmlConverter.markdown(from: html)
+        #expect(markdown.contains("# Title"))
+        #expect(markdown.contains("Body text"))
+    }
+}
+
+struct ImportDedupTests {
+
+    @Test func skipsExistingTitleOnReimport() throws {
+        let store = VaultStore()
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).md")
+        try "# One".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let first = try store.importMarkdownFile(from: file, dedup: .skipExistingTitle)
+        try "# Two".write(to: file, atomically: true, encoding: .utf8)
+        let second = try store.importMarkdownFile(from: file, dedup: .skipExistingTitle)
+        #expect(first.id == second.id)
+        #expect(second.content.contains("# One"))
+    }
+}
+
+struct VaultGlanceStoreTests {
+
+    @Test func roundTripsSnapshot() {
+        VaultGlanceStore.writeDailyNote(vaultID: "v1", title: "2026-07-04", snippet: "Hello")
+        let snapshot = VaultGlanceStore.readSnapshot()
+        #expect(snapshot?.vaultID == "v1")
+        #expect(snapshot?.dailyNoteTitle == "2026-07-04")
+        #expect(snapshot?.dailyNoteSnippet == "Hello")
+    }
+}
+
 // MARK: - v2.4 asset sync
 
 @MainActor

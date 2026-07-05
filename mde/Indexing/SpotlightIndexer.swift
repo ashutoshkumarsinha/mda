@@ -35,6 +35,7 @@ enum SpotlightIndexer {
     }
 
     static func reindexNotes(_ notes: [Note], vaultID: String) {
+        deleteAll(in: vaultID)
         let active = notes.filter { !$0.isDeleted }
         let items = active.map { note -> CSSearchableItem in
             let attributes = CSSearchableItemAttributeSet(contentType: .plainText)

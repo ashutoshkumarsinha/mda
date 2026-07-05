@@ -6,12 +6,45 @@
 import Foundation
 
 extension VaultStore {
-    /// Imports a single Markdown file as a new note.
+    /// Imports a single Markdown or Notion HTML file as a new note.
     @discardableResult
-    func importMarkdownFile(from url: URL, shouldRewriteEmbeddedImages: Bool = true) throws -> Note {
-        let content = try String(contentsOf: url, encoding: .utf8)
+    func importMarkdownFile(
+        from url: URL,
+        shouldRewriteEmbeddedImages: Bool = true,
+        dedup: ImportDedupMode = .skipExistingTitle
+    ) throws -> Note {
+        let raw = try String(contentsOf: url, encoding: .utf8)
+        let content: String
+        if url.pathExtension.lowercased() == "html" {
+            content = NotionHtmlConverter.markdown(from: raw)
+        } else {
+            content = raw
+        }
         let derivedTitle = url.deletingPathExtension().lastPathComponent
         let title = derivedTitle.isEmpty ? "" : derivedTitle
+
+        if dedup != .alwaysCreate, !title.isEmpty, let existingID = noteID(forTitle: title) {
+            switch dedup {
+            case .skipExistingTitle:
+                if let note = try fetchNote(id: existingID) { return note }
+            case .updateExistingTitle:
+                var note = try updateNote(id: existingID, content: content)
+                if shouldRewriteEmbeddedImages, isPackageAttached {
+                    let rewritten = try rewriteEmbeddedImages(
+                        in: content,
+                        relativeTo: url.deletingLastPathComponent(),
+                        noteID: existingID
+                    )
+                    if rewritten != content {
+                        note = try updateNote(id: existingID, content: rewritten)
+                    }
+                }
+                return note
+            case .alwaysCreate:
+                break
+            }
+        }
+
         var note = try createNote(title: title, content: content)
 
         if shouldRewriteEmbeddedImages, isPackageAttached {
@@ -21,7 +54,7 @@ extension VaultStore {
                 noteID: note.id
             )
             if rewritten != content {
-                note = try updateNote(id: note.id, content: rewritten) ?? note
+                note = try updateNote(id: note.id, content: rewritten)
             }
         }
         return note
@@ -136,7 +169,7 @@ extension VaultStore {
         var results: [URL] = []
         for case let fileURL as URL in enumerator {
             let ext = fileURL.pathExtension.lowercased()
-            if ext == "md" {
+            if ext == "md" || ext == "html" {
                 results.append(fileURL)
             }
         }

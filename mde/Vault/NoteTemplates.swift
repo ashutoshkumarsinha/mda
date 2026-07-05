@@ -46,17 +46,7 @@ enum NoteTemplate: String, CaseIterable, Identifiable, Sendable {
             - [ ]
             """
         case .daily:
-            return """
-            # Daily Note
-
-            ## Focus
-
-            -
-
-            ## Log
-
-            -
-            """
+            return DailyNoteHelper.defaultContent()
         case .project:
             return """
             # Project
