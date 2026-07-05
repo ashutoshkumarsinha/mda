@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var showVaultZipExport = false
     @State private var vaultZipExportDocument = VaultZipExportDocument()
     @State private var showMarkdownImport = false
+    @State private var showNotionImport = false
     @State private var importError: String?
     @State private var importBannerMessage: String?
     @State private var pendingPackageImport: PendingPackageImport?
@@ -122,6 +123,11 @@ struct ContentView: View {
                         Label("Export Vault (Zip)…", systemImage: "doc.zipper")
                     }
                     Button {
+                        showNotionImport = true
+                    } label: {
+                        Label("Import Notion Export…", systemImage: "square.and.arrow.down.on.square")
+                    }
+                    Button {
                         showMarkdownImport = true
                     } label: {
                         Label("Import Markdown / Package…", systemImage: "square.and.arrow.down")
@@ -174,6 +180,13 @@ struct ContentView: View {
             allowsMultipleSelection: true
         ) { result in
             importMarkdownFiles(result)
+        }
+        .fileImporter(
+            isPresented: $showNotionImport,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            importNotionFolder(result)
         }
         .sheet(isPresented: $showOnboarding) {
             OnboardingView(isPresented: $showOnboarding)
@@ -464,6 +477,23 @@ struct ContentView: View {
             showVaultZipExport = true
         } catch {
             importError = error.localizedDescription
+        }
+    }
+
+    private func importNotionFolder(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            importError = error.localizedDescription
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            do {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                _ = try store.importNotionDirectory(from: url)
+                try store.flushPackageIfNeeded()
+            } catch {
+                importError = error.localizedDescription
+            }
         }
     }
 

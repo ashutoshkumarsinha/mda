@@ -86,8 +86,9 @@ extension VaultStore {
         var result = content
         let references = MarkdownEmbeddedImageParser.externalReferences(in: content)
         for reference in references.reversed() {
-            let resolved = baseURL.appendingPathComponent(reference.target).standardizedFileURL
-            guard FileManager.default.fileExists(atPath: resolved.path) else { continue }
+            guard let resolved = Self.resolveEmbeddedImageURL(target: reference.target, relativeTo: baseURL) else {
+                continue
+            }
             let markdown = try importImage(
                 from: resolved,
                 intoNoteID: noteID,
@@ -96,6 +97,52 @@ extension VaultStore {
             result = (result as NSString).replacingCharacters(in: reference.fullRange, with: markdown)
         }
         return result
+    }
+
+    /// Recursively imports Notion markdown export folders (URL-encoded image paths supported).
+    func importNotionDirectory(from directoryURL: URL) throws -> [Note] {
+        let markdownFiles = try Self.collectNotionMarkdownFiles(in: directoryURL)
+        var imported: [Note] = []
+        for fileURL in markdownFiles {
+            imported.append(try importMarkdownFile(from: fileURL))
+        }
+        return imported
+    }
+
+    static func resolveEmbeddedImageURL(target: String, relativeTo baseURL: URL) -> URL? {
+        let candidates = [
+            target,
+            target.removingPercentEncoding ?? target,
+        ]
+        for candidate in candidates {
+            let url = baseURL.appendingPathComponent(candidate).standardizedFileURL
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    private static func collectNotionMarkdownFiles(in directoryURL: URL) throws -> [URL] {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var results: [URL] = []
+        for case let fileURL as URL in enumerator {
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "md" {
+                results.append(fileURL)
+            }
+        }
+        return results.sorted {
+            $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+        }
     }
 
     private static func collectObsidianMarkdownFiles(in directoryURL: URL) throws -> [URL] {

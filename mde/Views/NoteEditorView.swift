@@ -27,10 +27,12 @@ struct NoteEditorView: View {
     @State private var showExportPicker = false
     @State private var showNotePackageExport = false
     @State private var showNoteZipExport = false
+    @State private var showNotePDFExport = false
     @State private var showImageImporter = false
     @State private var exportDocument = MarkdownExportDocument()
     @State private var notePackageExportDocument = VaultFolderExportDocument()
     @State private var noteZipExportDocument = VaultZipExportDocument()
+    @State private var notePDFExportDocument = VaultPDFExportDocument()
     @State private var editorSummary: NoteListItem?
     @State private var isTrashedNote = false
 
@@ -86,6 +88,16 @@ struct NoteEditorView: View {
             document: noteZipExportDocument,
             contentType: .zip,
             defaultFilename: noteID.map { store.exportFilename(for: $0).replacingOccurrences(of: ".md", with: ".zip") } ?? "note-export.zip"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
+            }
+        }
+        .fileExporter(
+            isPresented: $showNotePDFExport,
+            document: notePDFExportDocument,
+            contentType: .pdf,
+            defaultFilename: noteID.map { store.exportFilename(for: $0).replacingOccurrences(of: ".md", with: ".pdf") } ?? "note-export.pdf"
         ) { result in
             if case .failure(let error) = result {
                 errorMessage = error.localizedDescription
@@ -205,6 +217,11 @@ struct NoteEditorView: View {
                                 prepareNoteZipExport(noteID: activeNoteID)
                             } label: {
                                 Label("Package (Zip)…", systemImage: "doc.zipper")
+                            }
+                            Button {
+                                prepareNotePDFExport(noteID: activeNoteID)
+                            } label: {
+                                Label("PDF…", systemImage: "doc.richtext")
                             }
                         } label: {
                             Label("Export", systemImage: "square.and.arrow.up")
@@ -401,6 +418,16 @@ struct NoteEditorView: View {
         }
     }
 
+    private func prepareNotePDFExport(noteID: String) {
+        do {
+            let data = try store.makeNotePDFExportData(noteID: noteID)
+            notePDFExportDocument = VaultPDFExportDocument(data: data)
+            showNotePDFExport = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func importImage(_ result: Result<[URL], Error>, noteID: String) {
         guard case .success(let urls) = result, let url = urls.first else { return }
         do {
@@ -451,7 +478,13 @@ struct NoteEditorView: View {
 
     private func createWikiLinkTarget(title: String) {
         do {
-            let note = try store.createNote(title: title)
+            let note: Note
+            if DailyNoteHelper.isDailyNoteTitle(title) {
+                let date = DailyNoteHelper.parseDate(from: title) ?? Date()
+                note = try store.openDailyNote(for: date)
+            } else {
+                note = try store.createNote(title: title)
+            }
             try store.flushPackageIfNeeded()
             selectedNoteID = note.id
         } catch {

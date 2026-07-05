@@ -107,6 +107,16 @@ struct NoteListView: View {
 
             if !isTrashView {
                 ToolbarItem {
+                    Button {
+                        openTodayNote()
+                    } label: {
+                        Label("Today", systemImage: "calendar")
+                    }
+                    .accessibilityLabel("Open today's note")
+                    .help("Open or create today's daily note")
+                }
+
+                ToolbarItem {
                     Menu {
                         Button("Blank Note", action: addNote)
                         Divider()
@@ -404,6 +414,16 @@ struct NoteListView: View {
     private func createNote(from template: NoteTemplate) {
         do {
             let note = try store.createNote(content: template.content)
+            selectedNoteID = note.id
+            try store.flushPackageIfNeeded()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func openTodayNote() {
+        do {
+            let note = try store.openDailyNote()
             selectedNoteID = note.id
             try store.flushPackageIfNeeded()
         } catch {

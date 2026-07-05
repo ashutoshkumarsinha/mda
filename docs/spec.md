@@ -55,7 +55,7 @@ MDE is a **local-first, minimalist note app** for macOS and iOS inspired by [Cal
 | Instant search | FTS5, ranked results with snippets |
 | Privacy | No third-party analytics; E2E encryption when syncing |
 
-**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **v4 complete** (smart import merge, editor polish, templates, graph search). **120+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
+**Current state:** v1 + v1.1 complete on macOS and iOS. **v2 complete** (assets, Obsidian import, GFM tables, package/zip export, CloudKit asset sync). **v3 complete** (package/zip import, external links, WikiLink aliases). **v4 complete** (smart import merge, editor polish, templates, graph search). **v5 complete** (daily notes, Spotlight indexing, PDF export, Notion import). **125+ automated unit tests** + iOS UI smoke in CI. CloudKit sync requires Release signing + Apple Developer team.
 
 ### Differentiation (v1)
 
@@ -691,6 +691,10 @@ Phased v3 delivery is documented in **[v3-roadmap.md](./v3-roadmap.md)**. v3.0â€
 
 Phased v4 delivery is documented in **[v4-roadmap.md](./v4-roadmap.md)**. v4.0â€“v4.5 are complete: smart import merge, editor constructs, templates, graph search, sync conflict log, and image cache.
 
+## v5 roadmap
+
+Phased v5 delivery is documented in **[v5-roadmap.md](./v5-roadmap.md)**. v5.0â€“v5.3 are complete: daily notes, Core Spotlight indexing, PDF export, and Notion folder import.
+
 ---
 
 ## 19. Glossary
@@ -722,3 +726,4 @@ Phased v4 delivery is documented in **[v4-roadmap.md](./v4-roadmap.md)**. v4.0â€
 | 1.5 | 2026-07-04 | v2 complete: tables, export packaging, CloudKit asset sync, 100+ unit tests |
 | 1.6 | 2026-07-04 | v3 complete: package/zip import, external links, WikiLink aliases |
 | 1.7 | 2026-07-04 | v4 complete: smart import merge, editor polish, templates, graph search |
+| 1.8 | 2026-07-04 | v5 complete: daily notes, Spotlight indexing, PDF export, Notion import |

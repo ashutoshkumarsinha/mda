@@ -125,6 +125,14 @@ extension VaultStore {
         try ZipArchiveBuilder.zipData(from: makeNotePackageExportWrapper(noteID: noteID))
     }
 
+    /// PDF export for a single note (plain-text layout).
+    func makeNotePDFExportData(noteID: String) throws -> Data {
+        guard let note = try fetchNote(id: noteID) else {
+            throw VaultStoreError.noteNotFound
+        }
+        return try NotePDFExporter.pdfData(title: note.title, body: note.content)
+    }
+
     /// Single-file vault export for quick sharing.
     func exportVaultAsCombinedMarkdown() throws -> String {
         let summaries = try noteSummariesFiltered(by: nil)

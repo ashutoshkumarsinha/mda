@@ -442,6 +442,7 @@ final class VaultStore {
         if notifySync {
             noteChanged(id)
         }
+        SpotlightIndexer.deleteNote(noteID: id, vaultID: meta.vaultID)
     }
 
     func noteSummariesFiltered(by tagPath: String?) throws -> [NoteListItem] {
@@ -725,6 +726,7 @@ final class VaultStore {
         try reloadTagTree()
         editorState.bumpLinksRevision()
         markPackageDirty()
+        SpotlightIndexer.deleteNote(noteID: id, vaultID: meta.vaultID)
     }
 
     @discardableResult
@@ -991,6 +993,15 @@ final class VaultStore {
             try PerformanceSignpost.measure(.vaultReloadTagTree) { try reloadTagTree() }
             try PerformanceSignpost.measure(.vaultResolveLinks) { try resolvePendingLinks() }
         }
+        try reindexSpotlight()
+    }
+
+    private func reindexSpotlight() throws {
+        guard let dbQueue else { return }
+        let notes = try dbQueue.read { db in
+            try Note.filter(Note.Columns.isDeleted == false).fetchAll(db)
+        }
+        SpotlightIndexer.reindexNotes(notes, vaultID: meta.vaultID)
     }
 
     private func resolvePendingLinks() throws {
@@ -1076,6 +1087,8 @@ final class VaultStore {
         if listMetadataChanged {
             listState.bumpRevision()
         }
+
+        SpotlightIndexer.indexNote(note, vaultID: meta.vaultID)
     }
 
     private func insertSummarySorted(_ item: NoteListItem) {
@@ -1233,6 +1246,41 @@ final class VaultStore {
                 }
             }
             return try Data(contentsOf: url)
+        }
+    }
+
+    // MARK: - Daily notes (v5)
+
+    func openDailyNote(for date: Date = Date()) throws -> Note {
+        let title = DailyNoteHelper.title(for: date)
+        let id: String?
+        if let cachedID = noteID(forTitle: title) {
+            id = cachedID
+        } else {
+            id = try noteIDFromDatabase(forTitle: title, includeDeleted: true)
+        }
+        if let id {
+            if let note = try fetchNote(id: id) {
+                return note
+            }
+            if try fetchNote(id: id, includeDeleted: true)?.isDeleted == true {
+                try restoreNote(id: id)
+                if let note = try fetchNote(id: id) {
+                    return note
+                }
+            }
+        }
+        return try createNote(title: title, content: DailyNoteHelper.defaultContent(for: date))
+    }
+
+    private func noteIDFromDatabase(forTitle title: String, includeDeleted: Bool) throws -> String? {
+        guard let dbQueue else { return nil }
+        return try dbQueue.read { db in
+            var request = Note.filter(Note.Columns.title == title)
+            if !includeDeleted {
+                request = request.filter(Note.Columns.isDeleted == false)
+            }
+            return try request.fetchOne(db)?.id
         }
     }
 

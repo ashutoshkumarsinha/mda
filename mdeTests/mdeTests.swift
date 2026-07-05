@@ -1874,6 +1874,111 @@ struct V4MarkdownConstructTests {
     }
 }
 
+// MARK: - v5 daily notes, PDF, Notion import
+
+struct DailyNoteHelperTests {
+
+    @Test func titleUsesISOFormat() {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone.current
+        components.year = 2026
+        components.month = 7
+        components.day = 4
+        let date = components.date!
+        #expect(DailyNoteHelper.title(for: date) == "2026-07-04")
+    }
+
+    @Test func recognizesDailyNoteTitles() {
+        #expect(DailyNoteHelper.isDailyNoteTitle("2026-07-04"))
+        #expect(!DailyNoteHelper.isDailyNoteTitle("July 4"))
+        #expect(!DailyNoteHelper.isDailyNoteTitle("2026-7-4"))
+    }
+
+    @Test func parseDateRoundTripsTitle() {
+        let parsed = DailyNoteHelper.parseDate(from: "2026-07-04")
+        #expect(parsed != nil)
+        #expect(DailyNoteHelper.title(for: parsed!) == "2026-07-04")
+    }
+
+    @Test func defaultContentIncludesHeading() {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone.current
+        components.year = 2026
+        components.month = 7
+        components.day = 4
+        let date = components.date!
+        #expect(DailyNoteHelper.defaultContent(for: date).contains("# 2026-07-04"))
+    }
+}
+
+@MainActor
+struct DailyNoteStoreTests {
+
+    @Test func openDailyNoteIsIdempotent() throws {
+        let store = VaultStore()
+        let first = try store.openDailyNote(for: Date(timeIntervalSince1970: 1_752_000_000))
+        let second = try store.openDailyNote(for: Date(timeIntervalSince1970: 1_752_000_000))
+        #expect(first.id == second.id)
+        #expect(first.title == DailyNoteHelper.title(for: Date(timeIntervalSince1970: 1_752_000_000)))
+    }
+
+    @Test func openDailyNoteRestoresFromTrash() throws {
+        let store = VaultStore()
+        let date = Date(timeIntervalSince1970: 1_752_086_400)
+        let created = try store.openDailyNote(for: date)
+        try store.softDeleteNote(id: created.id)
+        let restored = try store.openDailyNote(for: date)
+        #expect(restored.id == created.id)
+        #expect(restored.isDeleted == false)
+    }
+}
+
+struct V5ImportExportTests {
+
+    @Test func resolveEmbeddedImageURLDecodesPercentEncoding() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let imageDir = base.appendingPathComponent("My Photos", isDirectory: true)
+        try FileManager.default.createDirectory(at: imageDir, withIntermediateDirectories: true)
+        let image = imageDir.appendingPathComponent("pic.png")
+        try Data([0x89, 0x50]).write(to: image)
+
+        let encoded = "My%20Photos/pic.png"
+        let resolved = VaultStore.resolveEmbeddedImageURL(target: encoded, relativeTo: base)
+        #expect(resolved?.lastPathComponent == "pic.png")
+    }
+
+    @Test func pdfExportProducesNonEmptyData() throws {
+        let store = VaultStore()
+        let note = try store.createNote(title: "PDF Note", content: "Export me")
+        let data = try store.makeNotePDFExportData(noteID: note.id)
+        #expect(!data.isEmpty)
+        #expect(String(data: data.prefix(4), encoding: .ascii) == "%PDF")
+    }
+
+    @Test func importNotionDirectoryFindsNestedMarkdown() throws {
+        let exportRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: exportRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: exportRoot) }
+
+        let pageDir = exportRoot.appendingPathComponent("Page Title", isDirectory: true)
+        try FileManager.default.createDirectory(at: pageDir, withIntermediateDirectories: true)
+        let md = pageDir.appendingPathComponent("Page Title.md")
+        try "# Notion Page\n\nBody".write(to: md, atomically: true, encoding: .utf8)
+
+        let store = VaultStore()
+        let imported = try store.importNotionDirectory(from: exportRoot)
+        #expect(imported.count == 1)
+        #expect(imported[0].title == "Page Title")
+    }
+}
+
 // MARK: - v2.4 asset sync
 
 @MainActor
